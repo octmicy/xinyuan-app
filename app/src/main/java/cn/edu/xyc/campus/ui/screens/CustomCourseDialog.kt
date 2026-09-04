@@ -1,16 +1,19 @@
 package cn.edu.xyc.campus.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -21,12 +24,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -68,6 +74,12 @@ internal fun CustomCourseDialog(
         startTime: String, endTime: String,
     ) -> Unit,
 ) {
+    // 拆帧：先弹对话框窗口，表单下一帧再填充，避免打开瞬间一大帧卡顿
+    var formReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        formReady = true
+    }
     var name by rememberSaveable { mutableStateOf("") }
     var teacher by rememberSaveable { mutableStateOf("") }
     var room by rememberSaveable { mutableStateOf("") }
@@ -102,6 +114,16 @@ internal fun CustomCourseDialog(
         onDismissRequest = onDismiss,
         title = { Text("添加自定义课程") },
         text = {
+            if (!formReady) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(Modifier.size(26.dp))
+                }
+            } else {
             Column(
                 Modifier
                     .verticalScroll(rememberScrollState())
@@ -293,6 +315,7 @@ internal fun CustomCourseDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+            }
             }
         },
         confirmButton = { TextButton(onClick = ::submit) { Text("添加") } },
