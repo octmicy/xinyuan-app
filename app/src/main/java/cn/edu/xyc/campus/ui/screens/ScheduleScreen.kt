@@ -605,6 +605,53 @@ private fun RowScope.DayColumn(
                 }
             }
         }
+
+        // 冲突时段覆盖透明点击层：点击弹出选择框，决定看哪门课的详情
+        var conflictFor by remember { mutableStateOf<List<Course>?>(null) }
+        val conflictBands = remember(groups) {
+            buildList {
+                for (i in groups.indices) {
+                    for (j in 0 until i) {
+                        val top = maxOf(groups[i].top, groups[j].top)
+                        val bottom = minOf(groups[i].bottom, groups[j].bottom)
+                        if (bottom - top > 3.dp) add(Triple(groups[i], groups[j], top to bottom))
+                    }
+                }
+            }
+        }
+        conflictBands.forEach { (a, b, range) ->
+            Box(
+                Modifier
+                    .offset(y = range.first)
+                    .height(range.second - range.first)
+                    .fillMaxWidth()
+                    .clickable { conflictFor = a.courses + b.courses },
+            )
+        }
+        conflictFor?.let { candidates ->
+            AlertDialog(
+                onDismissRequest = { conflictFor = null },
+                title = { Text("该时段课程重叠") },
+                text = {
+                    Column {
+                        candidates.forEach { c ->
+                            TextButton(
+                                onClick = {
+                                    conflictFor = null
+                                    onCourseClick(c)
+                                },
+                            ) {
+                                Text(
+                                    "${c.name}（${DAY_NAMES.getOrElse(c.dayOfWeek - 1) { "" }}第${c.startSection}-${c.endSection}节）",
+                                    color = if (c.isCustom) Color(0xFF8A6D05) else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { conflictFor = null }) { Text("取消") } },
+            )
+        }
     }
 }
 
