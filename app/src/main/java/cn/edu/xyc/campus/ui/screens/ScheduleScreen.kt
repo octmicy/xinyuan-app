@@ -1,5 +1,6 @@
 package cn.edu.xyc.campus.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,9 +53,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cn.edu.xyc.campus.data.local.CustomCourseStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.TodayStore
 import cn.edu.xyc.campus.data.model.Course
+import cn.edu.xyc.campus.data.model.SectionTimes
 import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.JwxtResult
 import cn.edu.xyc.campus.data.remote.TermUtils
@@ -83,6 +87,8 @@ fun ScheduleScreen() {
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var showTermPicker by rememberSaveable { mutableStateOf(false) }
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
+    var showAddCourse by rememberSaveable { mutableStateOf(false) }
+    var timeMain by rememberSaveable { mutableStateOf(true) } // 左列作息表：主教学楼/其他教学楼
     val scope = rememberCoroutineScope()
     val term = TermUtils.of(selXnm, selTermNo)
 
@@ -186,6 +192,9 @@ fun ScheduleScreen() {
                 )
             }
             Spacer(Modifier.weight(1f))
+            IconButton(onClick = { showAddCourse = true }) {
+                Icon(Icons.Rounded.Add, "添加自定义课程")
+            }
             IconButton(onClick = { reloadKey++ }) { Icon(Icons.Rounded.Refresh, "刷新") }
         }
 
@@ -249,7 +258,17 @@ fun ScheduleScreen() {
         // 星期表头
         Row(Modifier.fillMaxWidth()) {
             Box(
-                Modifier.width(24.dp).height(28.dp),
+                Modifier
+                    .width(28.dp)
+                    .height(28.dp)
+                    .clickable {
+                        timeMain = !timeMain
+                        Toast.makeText(
+                            context,
+                            if (timeMain) "作息表：主教学楼（A-D座/主附东/附西）" else "作息表：其他教学楼",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -296,7 +315,11 @@ fun ScheduleScreen() {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    else -> Grid(courses = data.first, onCourseClick = { selectedCourse = it })
+                    else -> Grid(
+                        courses = data.first + CustomCourseStore.forWeek(zs),
+                        timeMain = timeMain,
+                        onCourseClick = { selectedCourse = it },
+                    )
                 }
             }
         }
@@ -316,16 +339,44 @@ fun ScheduleScreen() {
     }
 
     selectedCourse?.let { c ->
-        CourseDetailDialog(course = c, onDismiss = { selectedCourse = null })
+        CourseDetailDialog(
+            course = c,
+            onDismiss = { selectedCourse = null },
+            onDelete = if (c.isCustom) {
+                {
+                    CustomCourseStore.remove(context, c.customId)
+                    selectedCourse = null
+                }
+            } else null,
+        )
+    }
+
+    if (showAddCourse) {
+        CustomCourseDialog(
+            onDismiss = { showAddCourse = false },
+            onSave = { name, teacher, room, day, parity, startSec, endSec, startTime, endTime ->
+                CustomCourseStore.add(
+                    context, name, teacher, room, day, parity,
+                    startSec, endSec, startTime, endTime,
+                )
+                showAddCourse = false
+                Toast.makeText(context, "已添加自定义课程", Toast.LENGTH_SHORT).show()
+            },
+        )
     }
 }
 
-/** 课程详情弹窗：点击课表卡片放大查看（教师/教室/周次/学分等） */
+/** 课程详情弹窗：点击课表卡片放大查看（教师/教室/时间区间/周次/学分等） */
 @Composable
-private fun CourseDetailDialog(course: Course, onDismiss: () -> Unit) {
+private fun CourseDetailDialog(
+    course: Course,
+    onDismiss: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+) {
     val idx = (course.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
     val (bg, fg) = COURSE_COLORS[idx]
     val weekday = DAY_NAMES.getOrElse(course.dayOfWeek - 1) { "周${course.dayOfWeek}" }
+    val range = SectionTimes.rangeText(course.startSection, course.endSection, course.room)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -336,21 +387,49 @@ private fun CourseDetailDialog(course: Course, onDismiss: () -> Unit) {
                         .background(bg, RoundedCornerShape(3.dp)),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(course.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (course.isCustom) "[自定义] ${course.name}" else course.name,
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
         },
         text = {
             Column {
                 DetailRow("教师", course.teacher)
-                DetailRow("教室", listOf(course.building, course.room).filter { it.isNotEmpty() }.joinToString(" · "))
-                DetailRow("时间", "$weekday 第${course.startSection}-${course.endSection}节")
-                if (course.weekText.isNotEmpty()) DetailRow("周次", course.weekText)
-                if (course.credit.isNotEmpty()) DetailRow("学分", course.credit)
-                if (course.nature.isNotEmpty()) DetailRow("性质", course.nature)
-                if (course.classGroup.isNotEmpty()) DetailRow("教学班", course.classGroup)
+                DetailRow(
+                    "教室",
+                    listOf(course.building, course.room).filter { it.isNotEmpty() }.joinToString(" · "),
+                )
+                DetailRow(
+                    "时间",
+                    when {
+                        course.isCustom && course.customTime.isNotEmpty() ->
+                            "$weekday ${course.customTime} · 折算第${course.startSection}-${course.endSection}节"
+                        else ->
+                            "$weekday 第${course.startSection}-${course.endSection}节" +
+                                if (range.isNotEmpty()) "\n$range" else ""
+                    },
+                )
+                if (course.isCustom) {
+                    DetailRow("重复", course.weekText)
+                } else {
+                    if (course.weekText.isNotEmpty()) DetailRow("周次", course.weekText)
+                    if (course.credit.isNotEmpty()) DetailRow("学分", course.credit)
+                    if (course.nature.isNotEmpty()) DetailRow("性质", course.nature)
+                    if (course.classGroup.isNotEmpty()) DetailRow("教学班", course.classGroup)
+                }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+        confirmButton = {
+            androidx.compose.foundation.layout.Row {
+                if (onDelete != null) {
+                    TextButton(onClick = onDelete) {
+                        Text("删除", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+        },
     )
 }
 
@@ -379,21 +458,30 @@ private val DAY_NAMES = listOf("周一", "周二", "周三", "周四", "周五",
 
 /** 一屏式网格：7 列均分屏宽、12 节均分剩余高度，随分辨率自适应 */
 @Composable
-private fun Grid(courses: List<Course>, onCourseClick: (Course) -> Unit) {
+private fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Course) -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val cellH = maxHeight / 12
+        val table = SectionTimes.table(timeMain)
         Row(Modifier.fillMaxSize()) {
-            Column(Modifier.width(24.dp)) {
+            Column(Modifier.width(28.dp)) {
                 (1..12).forEach { i ->
                     Box(
                         Modifier.height(cellH).fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            "$i",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "$i",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                table[i - 1].start,
+                                fontSize = 7.sp,
+                                lineHeight = 8.sp,
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                        }
                     }
                 }
             }
@@ -448,7 +536,9 @@ private fun RowScope.DayColumn(
 @Composable
 private fun CourseCell(c: Course, modifier: Modifier, onClick: () -> Unit) {
     val idx = (c.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
-    val (bg, fg) = COURSE_COLORS[idx]
+    // 自定义课程统一金色系，与教务课区分
+    val (bg, fg) = if (c.isCustom) Color(0xFFFFF1C9) to Color(0xFF8A6D05)
+    else COURSE_COLORS[idx]
     Box(
         modifier
             .background(bg, RoundedCornerShape(4.dp))

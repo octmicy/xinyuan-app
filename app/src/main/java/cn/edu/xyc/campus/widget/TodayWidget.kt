@@ -34,8 +34,10 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import cn.edu.xyc.campus.MainActivity
+import cn.edu.xyc.campus.data.local.CustomCourseStore
 import cn.edu.xyc.campus.data.local.TodayStore
 import cn.edu.xyc.campus.data.model.Course
+import cn.edu.xyc.campus.data.model.SectionTimes
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -65,10 +67,11 @@ class TodayWidget : GlanceAppWidget() {
             monday != null && today != null &&
                 !today.before(monday) && today.time - monday.time < 7L * 24 * 3600 * 1000
         }
-        val courses = week?.courses
-            ?.filter { it.dayOfWeek == xqj }
-            ?.sortedWith(compareBy({ it.startSection }, { it.name }))
-            .orEmpty()
+        // 教务课表 + 自定义课程（独立落盘，按单双周过滤后合并）
+        val customs = if (week != null) CustomCourseStore.readForWeek(context, week.zs) else emptyList()
+        val courses = (week?.courses.orEmpty() + customs)
+            .filter { it.dayOfWeek == xqj }
+            .sortedWith(compareBy({ it.startSection }, { it.name }))
         val dateText = "${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日 " +
             WEEKDAYS[cal.get(Calendar.DAY_OF_WEEK) - 1]
 
@@ -177,8 +180,15 @@ class TodayWidget : GlanceAppWidget() {
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val table = SectionTimes.tableFor(c.room)
+            val label = when {
+                c.isCustom && c.customTime.isNotEmpty() -> c.customTime
+                compact -> "${c.startSection}-${c.endSection}节"
+                else -> "${c.startSection}-${c.endSection}节 " +
+                    (table.getOrNull(c.startSection - 1)?.start ?: "")
+            }
             Text(
-                "${c.startSection}-${c.endSection}节",
+                label.trim(),
                 style = TextStyle(color = ColorProvider(Primary), fontSize = 10.sp),
                 maxLines = 1,
             )
@@ -187,7 +197,7 @@ class TodayWidget : GlanceAppWidget() {
                 Text(
                     c.name,
                     style = TextStyle(
-                        color = ColorProvider(TextDark),
+                        color = ColorProvider(if (c.isCustom) CustomAmber else TextDark),
                         fontSize = if (compact) 10.sp else 11.sp,
                         fontWeight = FontWeight.Medium,
                     ),
@@ -200,7 +210,7 @@ class TodayWidget : GlanceAppWidget() {
                         style = TextStyle(color = ColorProvider(Secondary), fontSize = 9.sp),
                         maxLines = 1,
                     )
-                } else if (!compact && c.room.isNotEmpty()) {
+                } else if ((!compact || c.isCustom) && c.room.isNotEmpty()) {
                     Text(
                         "@${c.room}",
                         style = TextStyle(color = ColorProvider(Secondary), fontSize = 9.sp),
@@ -218,6 +228,7 @@ class TodayWidget : GlanceAppWidget() {
         private val Primary = Color(0xFF1D3F8C)
         private val Secondary = Color(0xFF6B7B99)
         private val TextDark = Color(0xFF22304D)
+        private val CustomAmber = Color(0xFF8A6D05) // 自定义课程标识色
 
         // Calendar.DAY_OF_WEEK: 1=周日 … 7=周六
         private val WEEKDAYS = arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
