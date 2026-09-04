@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">新院助手</string>
-    <string name="widget_today_label">今日课程</string>
-    <string name="widget_today_label_small">今日课程 (小)</string>
-    <string name="widget_today_label_large">今日课程 (大)</string>
-    <string name="widget_today_desc">显示今天的课程安排，点击打开新院助手</string>
+    <string name="widget_today_label_2x2">今日课程 2×2</string>
+    <string name="widget_today_label_2x3">今日课程 2×3</string>
+    <string name="widget_today_label_3x3">今日课程 3×3</string>
+    <string name="widget_today_label_3x4">今日课程 3×4</string>
+    <string name="widget_today_label_4x4">今日课程 4×4</string>
+    <string name="widget_today_desc">显示课程安排，可翻看日期，点击打开新院助手</string>
 </resources>
