@@ -26,37 +26,61 @@
         <receiver
             android:name=".widget.TodayWidgetReceiver"
             android:exported="false"
-            android:label="@string/widget_today_label">
+            android:label="@string/widget_today_label_2x2">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/today_widget_info" />
+                android:resource="@xml/today_widget_info_2x2" />
         </receiver>
 
         <receiver
-            android:name=".widget.TodayWidgetReceiverSmall"
+            android:name=".widget.TodayWidgetReceiver23"
             android:exported="false"
-            android:label="@string/widget_today_label_small">
+            android:label="@string/widget_today_label_2x3">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/today_widget_info_small" />
+                android:resource="@xml/today_widget_info_2x3" />
         </receiver>
 
         <receiver
-            android:name=".widget.TodayWidgetReceiverLarge"
+            android:name=".widget.TodayWidgetReceiver33"
             android:exported="false"
-            android:label="@string/widget_today_label_large">
+            android:label="@string/widget_today_label_3x3">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/today_widget_info_large" />
+                android:resource="@xml/today_widget_info_3x3" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TodayWidgetReceiver34"
+            android:exported="false"
+            android:label="@string/widget_today_label_3x4">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info_3x4" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TodayWidgetReceiver44"
+            android:exported="false"
+            android:label="@string/widget_today_label_4x4">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info_4x4" />
         </receiver>
     </application>
 

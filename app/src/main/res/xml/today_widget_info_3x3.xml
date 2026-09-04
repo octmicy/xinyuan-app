@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="110dp"
-    android:minHeight="110dp"
-    android:targetCellWidth="2"
-    android:targetCellHeight="2"
+    android:minWidth="180dp"
+    android:minHeight="240dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="3"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:resizeMode="horizontal|vertical"
