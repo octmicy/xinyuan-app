@@ -9,11 +9,55 @@ data class Course(
     val dayOfWeek: Int,      // xqj：1=周一 … 7=周日
     val startSection: Int,   // jcor "1-2" 前段
     val endSection: Int,     // jcor "1-2" 后段
-    val weekText: String,    // zcd 可读串（如 "1-16周"）
+    val weekText: String,    // zcd 可读串（如 "1-16周"；自定义课为 每周/单周/双周）
     val credit: String,      // xf
     val nature: String,      // kcxz（公共必修等）
     val classGroup: String,  // jxbmc 教学班
+    val isCustom: Boolean = false, // 自定义课程（非教务数据）
+    val customId: Long = 0L,       // 自定义课程 id（删除用）
+    val customTime: String = "",   // 自定义课程的具体时间（如 "18:30-20:00"，按节次模式为空）
 )
+
+/**
+ * 作息时间表（主教学楼 A/B/C/D 座、主附东、附西教室 与 其他教学楼，
+ * 仅第 3、4 节不同）。来自学校作息表。
+ */
+object SectionTimes {
+    data class SectionTime(val start: String, val end: String)
+
+    private val MAIN = listOf(
+        SectionTime("8:10", "8:55"), SectionTime("9:00", "9:45"),
+        SectionTime("10:15", "11:00"), SectionTime("11:05", "11:50"),
+        SectionTime("14:00", "14:45"), SectionTime("14:50", "15:35"),
+        SectionTime("15:50", "16:35"), SectionTime("16:40", "17:25"),
+        SectionTime("17:30", "18:15"), SectionTime("19:00", "19:45"),
+        SectionTime("19:50", "20:35"), SectionTime("20:40", "21:25"),
+    )
+
+    private val OTHER = listOf(
+        SectionTime("8:10", "8:55"), SectionTime("9:00", "9:45"),
+        SectionTime("10:00", "10:45"), SectionTime("10:50", "11:35"),
+        SectionTime("14:00", "14:45"), SectionTime("14:50", "15:35"),
+        SectionTime("15:50", "16:35"), SectionTime("16:40", "17:25"),
+        SectionTime("17:30", "18:15"), SectionTime("19:00", "19:45"),
+        SectionTime("19:50", "20:35"), SectionTime("20:40", "21:25"),
+    )
+
+    /** 左列展示用：按开关取整表 */
+    fun table(main: Boolean): List<SectionTime> = if (main) MAIN else OTHER
+
+    /** 按教室推断作息：名字带 主/附 的归主教学楼，其余归其他教学楼 */
+    fun tableFor(room: String): List<SectionTime> =
+        if (room.contains("主") || room.contains("附")) MAIN else OTHER
+
+    /** "10:15-11:50" 形式的节次区间，异常返回空串 */
+    fun rangeText(sectionStart: Int, sectionEnd: Int, room: String): String {
+        val t = tableFor(room)
+        val s = t.getOrNull(sectionStart - 1) ?: return ""
+        val e = t.getOrNull(sectionEnd - 1) ?: return ""
+        return "${s.start}-${e.end}"
+    }
+}
 
 /** 周次信息（来自 /kbcx/xskbcxMobile_cxZc.html） */
 data class WeekInfo(
