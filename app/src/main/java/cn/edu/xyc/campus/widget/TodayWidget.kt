@@ -159,10 +159,10 @@ class TodayWidget : GlanceAppWidget() {
                 .padding(if (compact) 6.dp else 10.dp),
         ) {
             Column {
-                // 第一行：标题 + 相对日期标签
+                // 第一行：标题（翻看非今天时显示"课程预览"避免误解）+ 相对日期标签
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "今日课程",
+                        if (offset == 0) "今日课程" else "课程预览",
                         style = TextStyle(
                             color = ColorProvider(Primary),
                             fontSize = if (compact) 11.sp else 13.sp,
