@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,9 +49,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -301,6 +305,8 @@ fun ScheduleScreen() {
                 val zs = page + 1
                 val key = ScheduleCache.weekKey(selXnm, term.xqm, zs)
                 val data = ScheduleCache.weekData[key]
+                // 自定义课合并按 (周次, 自定义课数量) 缓存，避免每次重组重算（+ 按钮卡顿来源之一）
+                val customs = remember(zs, CustomCourseStore.courses.size) { CustomCourseStore.forWeek(zs) }
                 android.util.Log.d(
                     "XycApp",
                     "Page $page key=$key has=${ScheduleCache.weekData.containsKey(key)} cacheSize=${ScheduleCache.weekData.size}",
@@ -320,7 +326,7 @@ fun ScheduleScreen() {
                         )
                     }
                     else -> Grid(
-                        courses = data.first + CustomCourseStore.forWeek(zs),
+                        courses = data.first + customs,
                         timeMain = timeMain,
                         onCourseClick = { selectedCourse = it },
                     )
@@ -515,15 +521,55 @@ private fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Cours
     }
 }
 
-/** 已按时间比例排好位置的课（同簇内分栏并排，保证每门课都可见） */
+/** 已按时间比例排好位置的课 */
 private class PlacedGroup(
     val top: androidx.compose.ui.unit.Dp,
     val bottom: androidx.compose.ui.unit.Dp,
     val courses: List<Course>,
 ) {
-    var lane: Int = 0
-    var xFrac: Float = 0f
-    var widthFrac: Float = 1f
+    // 与 z 序更低课程的重叠带（相对本格 0-1）；上层课这段要半透明，内容避开
+    var ovTop: Float = 0f
+    var ovBottom: Float = 0f
+}
+
+private fun computePlacements(dayCourses: List<Course>, cellH: androidx.compose.ui.unit.Dp): List<PlacedGroup> {
+    val groups = dayCourses
+        .groupBy {
+            listOf(
+                it.startSection.toFloat(), it.endSection.toFloat(),
+                it.timeFracStart, it.timeFracEnd,
+            )
+        }
+        .map { (_, list) ->
+            val f = list.first()
+            PlacedGroup(
+                top = cellH * (f.startSection - 1 + f.timeFracStart),
+                bottom = cellH * (f.endSection - 1 + f.timeFracEnd),
+                courses = list,
+            )
+        }
+        .sortedBy { it.top }
+    // 每组与 z 序更早（画在下面）的组的重叠带
+    groups.forEachIndexed { i, g ->
+        val total = (g.bottom - g.top).value
+        if (total <= 0f) return@forEachIndexed
+        var f0 = 1f
+        var f1 = 0f
+        for (j in 0 until i) {
+            val o = groups[j]
+            val t = maxOf(g.top, o.top).value
+            val b = minOf(g.bottom, o.bottom).value
+            if (b - t > 1f) {
+                f0 = minOf(f0, ((t - g.top.value) / total).coerceIn(0f, 1f))
+                f1 = maxOf(f1, ((b - g.top.value) / total).coerceIn(0f, 1f))
+            }
+        }
+        if (f1 > f0) {
+            g.ovTop = f0
+            g.ovBottom = f1
+        }
+    }
+    return groups
 }
 
 @Composable
@@ -532,67 +578,18 @@ private fun RowScope.DayColumn(
     cellH: androidx.compose.ui.unit.Dp,
     onCourseClick: (Course) -> Unit,
 ) {
-    androidx.compose.foundation.layout.BoxWithConstraints(
+    Box(
         Modifier
             .weight(1f)
             .fillMaxHeight(),
     ) {
-        val colW = maxWidth
-        // 同节次区间且同时间比例的课为一组；时间模式的课按真实时间比例占据格子
-        val groups = dayCourses
-            .groupBy {
-                listOf(
-                    it.startSection.toFloat(), it.endSection.toFloat(),
-                    it.timeFracStart, it.timeFracEnd,
-                )
-            }
-            .map { (_, list) ->
-                val first = list.first()
-                PlacedGroup(
-                    top = cellH * (first.startSection - 1 + first.timeFracStart),
-                    bottom = cellH * (first.endSection - 1 + first.timeFracEnd),
-                    courses = list,
-                )
-            }
-            .sortedBy { it.top }
-
-        // 时间重叠的组聚成一簇；簇内贪心分道（列），每道等宽并排——下方课程不会被盖住
-        val clusters = mutableListOf<MutableList<PlacedGroup>>()
-        var clusterMaxBottom = (-1).dp
-        groups.forEach { g ->
-            if (clusters.isEmpty() || g.top >= clusterMaxBottom) {
-                clusters += mutableListOf(g)
-                clusterMaxBottom = g.bottom
-            } else {
-                clusters.last() += g
-                clusterMaxBottom = maxOf(clusterMaxBottom, g.bottom)
-            }
-        }
-        clusters.forEach { cluster ->
-            val laneBottoms = mutableListOf<androidx.compose.ui.unit.Dp>()
-            cluster.forEach { g ->
-                val lane = laneBottoms.indexOfFirst { it <= g.top }
-                if (lane == -1) {
-                    laneBottoms += g.bottom
-                    g.lane = laneBottoms.size - 1
-                } else {
-                    laneBottoms[lane] = g.bottom
-                    g.lane = lane
-                }
-            }
-            val laneCount = laneBottoms.size
-            cluster.forEach { g ->
-                g.xFrac = g.lane.toFloat() / laneCount
-                g.widthFrac = 1f / laneCount
-            }
-        }
-
+        val groups = remember(dayCourses, cellH) { computePlacements(dayCourses, cellH) }
         groups.forEach { g ->
             Row(
                 Modifier
-                    .offset(x = colW * g.xFrac, y = g.top)
-                    .width(colW * g.widthFrac)
-                    .height(g.bottom - g.top),
+                    .offset(y = g.top)
+                    .height(g.bottom - g.top)
+                    .fillMaxWidth(),
             ) {
                 g.courses.forEach { c ->
                     CourseCell(
@@ -601,6 +598,8 @@ private fun RowScope.DayColumn(
                             .weight(1f)
                             .fillMaxSize()
                             .padding(1.dp),
+                        ovTop = g.ovTop,
+                        ovBottom = g.ovBottom,
                         onClick = { onCourseClick(c) },
                     )
                 }
@@ -610,18 +609,60 @@ private fun RowScope.DayColumn(
 }
 
 @Composable
-private fun CourseCell(c: Course, modifier: Modifier, onClick: () -> Unit) {
+private fun CourseCell(
+    c: Course,
+    modifier: Modifier,
+    ovTop: Float = 0f,
+    ovBottom: Float = 0f,
+    onClick: () -> Unit,
+) {
     val idx = (c.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
     // 自定义课程统一金色系，与教务课区分
     val (bg, fg) = if (c.isCustom) Color(0xFFFFF1C9) to Color(0xFF8A6D05)
     else COURSE_COLORS[idx]
-    Box(
-        modifier
-            .background(bg, RoundedCornerShape(4.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 2.dp, vertical = 1.dp),
-    ) {
-        Column {
+    // 内容避开重叠带：重叠在顶部→信息靠底；在底部→靠顶；全覆盖→居中
+    val hasOverlap = ovBottom - ovTop > 0.01f
+    val arrangement = when {
+        !hasOverlap -> Arrangement.Top
+        ovTop <= 0.01f && ovBottom >= 0.99f -> Arrangement.Center
+        ovTop <= 0.01f -> Arrangement.Bottom
+        ovBottom >= 0.99f -> Arrangement.Top
+        else -> if (ovTop >= 1 - ovBottom) Arrangement.Bottom else Arrangement.Top
+    }
+    Box(modifier.clickable { onClick() }) {
+        // 背景分段：重叠带半透明，让下层课程透出来
+        Box(
+            Modifier
+                .matchParentSize()
+                .drawBehind {
+                    val r = 4.dp.toPx()
+                    listOf(
+                        Triple(0f, ovTop, false),
+                        Triple(ovTop, ovBottom, true),
+                        Triple(ovBottom, 1f, false),
+                    ).forEach { (f0, f1, overlap) ->
+                        if (f1 - f0 <= 0.005f) return@forEach
+                        val path = Path().apply {
+                            addRoundRect(
+                                RoundRect(
+                                    rect = Rect(0f, size.height * f0, size.width, size.height * f1),
+                                    topLeft = CornerRadius(if (f0 <= 0.005f) r else 0f),
+                                    topRight = CornerRadius(if (f0 <= 0.005f) r else 0f),
+                                    bottomRight = CornerRadius(if (f1 >= 0.995f) r else 0f),
+                                    bottomLeft = CornerRadius(if (f1 >= 0.995f) r else 0f),
+                                ),
+                            )
+                        }
+                        drawPath(path, if (overlap) bg.copy(alpha = 0.45f) else bg)
+                    }
+                },
+        )
+        Column(
+            Modifier
+                .matchParentSize()
+                .padding(horizontal = 2.dp, vertical = 1.dp),
+            verticalArrangement = arrangement,
+        ) {
             Text(
                 c.name,
                 fontSize = 8.sp,

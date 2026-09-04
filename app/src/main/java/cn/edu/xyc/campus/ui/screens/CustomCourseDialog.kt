@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -27,21 +28,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 private val DAY_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
 
-private val TIME_REGEX = Regex("^\\d{1,2}:\\d{2}$")
-
-/** 输入自动格式化：只打数字（如 1830 / 1630）自动补冒号成 18:30 / 16:30 */
-private fun fmtTime(raw: String): String {
-    val d = raw.filter { it.isDigit() }.take(4)
-    return when {
-        d.isEmpty() -> ""
-        d.length <= 2 -> d
-        else -> d.take(d.length - 2) + ":" + d.takeLast(2)
+/**
+ * 时间输入只存数字（如 1850 / 930），不打冒号——边打边格式化会因光标错位产生 18:05 这类错乱。
+ * 解析：3 位当 9:30，4 位当 18:50；小时<24、分钟<60 才合法。
+ */
+private fun timeMinutes(digits: String): Int? {
+    val v = when (digits.length) {
+        3 -> "0$digits"
+        4 -> digits
+        else -> return null
     }
+    val h = v.take(2).toIntOrNull() ?: return null
+    val m = v.takeLast(2).toIntOrNull() ?: return null
+    if (h > 23 || m > 59) return null
+    return h * 60 + m
 }
+
+private fun minutesText(minutes: Int): String =
+    "%02d:%02d".format(minutes / 60, minutes % 60)
 
 /**
  * 添加自定义课程：名称必填，时间二选一——
@@ -73,12 +82,10 @@ internal fun CustomCourseDialog(
     var endExpanded by remember { mutableStateOf(false) }
     var invalid by remember { mutableStateOf(false) }
 
-    fun timeOk(t: String) = TIME_REGEX.matches(t) &&
-        t.split(":").let { (it[0].toIntOrNull() ?: 99) < 24 && (it[1].toIntOrNull() ?: 99) < 60 }
-
     fun submit() {
-        val timeInvalid = timeMode == 1 &&
-            (!timeOk(startTime) || !timeOk(endTime) || startTime >= endTime)
+        val sm = timeMinutes(startTime)
+        val em = timeMinutes(endTime)
+        val timeInvalid = timeMode == 1 && (sm == null || em == null || sm >= em)
         if (name.isBlank() || day == 0 || timeInvalid) {
             invalid = true
             return
@@ -86,8 +93,8 @@ internal fun CustomCourseDialog(
         onSave(
             name.trim(), teacher.trim(), room.trim(), day, parity,
             startSec, endSec,
-            if (timeMode == 1) startTime.trim() else "",
-            if (timeMode == 1) endTime.trim() else "",
+            if (timeMode == 1) minutesText(sm!!) else "",
+            if (timeMode == 1) minutesText(em!!) else "",
         )
     }
 
@@ -231,26 +238,37 @@ internal fun CustomCourseDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = startTime,
-                            onValueChange = { startTime = fmtTime(it); invalid = false },
+                            onValueChange = { startTime = it.filter(Char::isDigit).take(4); invalid = false },
                             label = { Text("开始时间") },
                             placeholder = { Text("1830") },
+                            supportingText = {
+                                timeMinutes(startTime)?.let { Text("即 ${minutesText(it)}") }
+                            },
                             singleLine = true,
-                            isError = invalid && !timeOk(startTime),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = invalid && timeMinutes(startTime) == null,
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
                             value = endTime,
-                            onValueChange = { endTime = fmtTime(it); invalid = false },
+                            onValueChange = { endTime = it.filter(Char::isDigit).take(4); invalid = false },
                             label = { Text("结束时间") },
                             placeholder = { Text("2000") },
+                            supportingText = {
+                                timeMinutes(endTime)?.let { Text("即 ${minutesText(it)}") }
+                            },
                             singleLine = true,
-                            isError = invalid && !timeOk(endTime),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = invalid && timeMinutes(endTime) == null,
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    if (invalid && timeMode == 1 && (!timeOk(startTime) || !timeOk(endTime) || startTime >= endTime)) {
+                    if (invalid && timeMode == 1 &&
+                        (timeMinutes(startTime) == null || timeMinutes(endTime) == null ||
+                            (timeMinutes(startTime) ?: 0) >= (timeMinutes(endTime) ?: 0))
+                    ) {
                         Text(
-                            "只需输入数字（如 1830 = 18:30），且开始早于结束",
+                            "只输入数字（如 1850 = 18:50，930 = 9:30），且开始早于结束",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
