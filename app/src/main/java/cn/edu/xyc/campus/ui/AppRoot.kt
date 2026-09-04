@@ -1,5 +1,6 @@
 package cn.edu.xyc.campus.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import cn.edu.xyc.campus.R
 import cn.edu.xyc.campus.data.local.CredStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.StoredCredential
@@ -70,8 +75,16 @@ fun AppRoot() {
     when {
         autoChecking -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(Modifier.size(36.dp))
-                Spacer(Modifier.height(14.dp))
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(96.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("新院助手", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(18.dp))
+                CircularProgressIndicator(Modifier.size(28.dp))
+                Spacer(Modifier.height(12.dp))
                 Text("自动登录中…", style = MaterialTheme.typography.bodyMedium)
             }
         }
