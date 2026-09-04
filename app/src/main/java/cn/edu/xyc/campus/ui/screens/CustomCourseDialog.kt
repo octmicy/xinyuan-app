@@ -33,6 +33,16 @@ private val DAY_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
 
 private val TIME_REGEX = Regex("^\\d{1,2}:\\d{2}$")
 
+/** 输入自动格式化：只打数字（如 1830 / 1630）自动补冒号成 18:30 / 16:30 */
+private fun fmtTime(raw: String): String {
+    val d = raw.filter { it.isDigit() }.take(4)
+    return when {
+        d.isEmpty() -> ""
+        d.length <= 2 -> d
+        else -> d.take(d.length - 2) + ":" + d.takeLast(2)
+    }
+}
+
 /**
  * 添加自定义课程：名称必填，时间二选一——
  * 按节次（起止节次，作息表推算时间）或按具体时间（如 18:30-20:00，网格按重叠节次折算）。
@@ -221,18 +231,18 @@ internal fun CustomCourseDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = startTime,
-                            onValueChange = { startTime = it; invalid = false },
+                            onValueChange = { startTime = fmtTime(it); invalid = false },
                             label = { Text("开始时间") },
-                            placeholder = { Text("18:30") },
+                            placeholder = { Text("1830") },
                             singleLine = true,
                             isError = invalid && !timeOk(startTime),
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
                             value = endTime,
-                            onValueChange = { endTime = it; invalid = false },
+                            onValueChange = { endTime = fmtTime(it); invalid = false },
                             label = { Text("结束时间") },
-                            placeholder = { Text("20:00") },
+                            placeholder = { Text("2000") },
                             singleLine = true,
                             isError = invalid && !timeOk(endTime),
                             modifier = Modifier.weight(1f),
@@ -240,7 +250,7 @@ internal fun CustomCourseDialog(
                     }
                     if (invalid && timeMode == 1 && (!timeOk(startTime) || !timeOk(endTime) || startTime >= endTime)) {
                         Text(
-                            "时间格式应为 时:分（如 18:30），且开始早于结束",
+                            "只需输入数字（如 1830 = 18:30），且开始早于结束",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )

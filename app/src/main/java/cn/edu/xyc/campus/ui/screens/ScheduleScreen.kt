@@ -1,6 +1,7 @@
 package cn.edu.xyc.campus.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -46,7 +47,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -462,6 +466,21 @@ private fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Cours
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val cellH = maxHeight / 12
         val table = SectionTimes.table(timeMain)
+        // 行列细线网格，区分节次行与星期列
+        Canvas(Modifier.matchParentSize()) {
+            val rowH = size.height / 12
+            val leftCol = 28.dp.toPx()
+            val colW = (size.width - leftCol) / 7
+            val line = Color(0x241E5AA8)
+            val stroke = 0.75.dp.toPx()
+            for (r in 1 until 12) {
+                drawLine(line, Offset(0f, r * rowH), Offset(size.width, r * rowH), stroke)
+            }
+            for (c in 0..7) {
+                val x = leftCol + c * colW
+                drawLine(line, Offset(x, 0f), Offset(x, size.height), stroke)
+            }
+        }
         Row(Modifier.fillMaxSize()) {
             Column(Modifier.width(28.dp)) {
                 (1..12).forEach { i ->
@@ -496,6 +515,13 @@ private fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Cours
     }
 }
 
+/** 已按时间比例排好位置的课（同组并排展示） */
+private data class PlacedGroup(
+    val top: androidx.compose.ui.unit.Dp,
+    val bottom: androidx.compose.ui.unit.Dp,
+    val courses: List<Course>,
+)
+
 @Composable
 private fun RowScope.DayColumn(
     dayCourses: List<Course>,
@@ -507,29 +533,77 @@ private fun RowScope.DayColumn(
             .weight(1f)
             .fillMaxHeight(),
     ) {
-        dayCourses
-            .groupBy { it.startSection to it.endSection }
-            .forEach { (range, list) ->
-                val top = cellH * (range.first - 1)
-                val h = cellH * (range.second - range.first + 1)
-                Row(
-                    Modifier
-                        .offset(y = top)
-                        .height(h)
-                        .fillMaxWidth(),
-                ) {
-                    list.forEach { c ->
-                        CourseCell(
-                            c = c,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxSize()
-                                .padding(1.dp),
-                            onClick = { onCourseClick(c) },
-                        )
-                    }
+        // 同节次区间且同时间比例的课并排；时间模式的课按真实时间比例占据格子
+        val groups = dayCourses
+            .groupBy {
+                listOf(
+                    it.startSection.toFloat(), it.endSection.toFloat(),
+                    it.timeFracStart, it.timeFracEnd,
+                )
+            }
+            .map { (_, list) ->
+                val first = list.first()
+                PlacedGroup(
+                    top = cellH * (first.startSection - 1 + first.timeFracStart),
+                    bottom = cellH * (first.endSection - 1 + first.timeFracEnd),
+                    courses = list,
+                )
+            }
+            .sortedBy { it.top }
+        groups.forEach { g ->
+            Row(
+                Modifier
+                    .offset(y = g.top)
+                    .height(g.bottom - g.top)
+                    .fillMaxWidth(),
+            ) {
+                g.courses.forEach { c ->
+                    CourseCell(
+                        c = c,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .padding(1.dp),
+                        onClick = { onCourseClick(c) },
+                    )
                 }
             }
+        }
+        // 时间交叉的区域画斜杠阴影，提示课程冲突
+        val hatchRects = buildList {
+            for (i in groups.indices) {
+                for (j in i + 1 until groups.size) {
+                    val top = maxOf(groups[i].top, groups[j].top)
+                    val bottom = minOf(groups[i].bottom, groups[j].bottom)
+                    if (bottom - top > 3.dp) add(top to bottom)
+                }
+            }
+        }
+        hatchRects.forEach { (top, bottom) ->
+            Box(
+                Modifier
+                    .offset(y = top)
+                    .height(bottom - top)
+                    .fillMaxWidth()
+                    .drawBehind {
+                        // 必须裁剪到本格子范围，否则斜线会延伸到相邻列
+                        clipRect(0f, 0f, size.width, size.height) {
+                            val stroke = 2.dp.toPx()
+                            val step = 9.dp.toPx()
+                            var x = -size.height
+                            while (x < size.width) {
+                                drawLine(
+                                    color = Color(0x40374760),
+                                    start = Offset(x, size.height),
+                                    end = Offset(x + size.height, 0f),
+                                    strokeWidth = stroke,
+                                )
+                                x += step
+                            }
+                        }
+                    },
+            )
+        }
     }
 }
 

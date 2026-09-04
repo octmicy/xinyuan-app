@@ -31,6 +31,8 @@ object CustomCourseStore {
         val parity: Int,
         val startTime: String = "", // 非空 = 按具体时间模式
         val endTime: String = "",
+        val fracStart: Float = 0f,  // 起始节次格内纵向起点比例
+        val fracEnd: Float = 1f,    // 结束节次格内纵向终点比例
     ) {
         val isTimeMode: Boolean get() = startTime.isNotEmpty() && endTime.isNotEmpty()
         val timeText: String get() = if (isTimeMode) "$startTime-$endTime" else ""
@@ -63,6 +65,8 @@ object CustomCourseStore {
                             parity = o.optInt("parity", 0),
                             startTime = o.optString("stime"),
                             endTime = o.optString("etime"),
+                            fracStart = o.optDouble("fs", 0.0).toFloat(),
+                            fracEnd = o.optDouble("fe", 1.0).toFloat(),
                         )
                     }
                     nextId = (courses.maxOfOrNull { it.id } ?: 0L) + 1
@@ -83,15 +87,16 @@ object CustomCourseStore {
         startTime: String = "",
         endTime: String = "",
     ) {
-        val (s, e) = if (startTime.isNotEmpty() && endTime.isNotEmpty()) {
-            placeSections(startTime, endTime, room)
+        val placement = if (startTime.isNotEmpty() && endTime.isNotEmpty()) {
+            placeByTime(startTime, endTime, room)
         } else {
-            startSec to endSec
+            Placement(startSec, endSec, 0f, 1f)
         }
         val def = Def(
             id = nextId++, name = name, teacher = teacher, room = room,
-            dayOfWeek = day, startSection = s, endSection = e, parity = parity,
-            startTime = startTime, endTime = endTime,
+            dayOfWeek = day, startSection = placement.sectionStart, endSection = placement.sectionEnd,
+            parity = parity, startTime = startTime, endTime = endTime,
+            fracStart = placement.fracStart, fracEnd = placement.fracEnd,
         )
         synchronized(courses) { courses += def }
         persist(context)
@@ -102,18 +107,27 @@ object CustomCourseStore {
         persist(context)
     }
 
+    private data class Placement(
+        val sectionStart: Int,
+        val sectionEnd: Int,
+        val fracStart: Float,
+        val fracEnd: Float,
+    )
+
+    private fun toMin(s: String): Int = s.split(":").mapNotNull { it.toIntOrNull() }.let {
+        if (it.size == 2) it[0] * 60 + it[1] else -1
+    }
+
     /**
-     * 具体时间 → 网格节次占位：取与 [startTime,endTime) 有交集的节次。
+     * 具体时间 → 网格节次占位：取与 [startTime,endTime) 有交集的节次，
+     * 并算出首尾节次内的纵向比例（不满一节只画部分高度）。
      * 完全落在作息之外（如深夜）时钳到第 1 或第 12 节，保证可见。
      */
-    private fun placeSections(startTime: String, endTime: String, room: String): Pair<Int, Int> {
+    private fun placeByTime(startTime: String, endTime: String, room: String): Placement {
         val table = SectionTimes.tableFor(room)
-        fun toMin(s: String): Int = s.split(":").mapNotNull { it.toIntOrNull() }.let {
-            if (it.size == 2) it[0] * 60 + it[1] else -1
-        }
         val st = toMin(startTime)
         val en = toMin(endTime)
-        if (st < 0 || en < 0) return 1 to 1
+        if (st < 0 || en < 0 || en <= st) return Placement(1, 1, 0f, 1f)
         var s = Int.MAX_VALUE
         var e = Int.MIN_VALUE
         table.forEachIndexed { i, sec ->
@@ -125,9 +139,18 @@ object CustomCourseStore {
             }
         }
         if (s > e) {
-            return if (en <= toMin(table.first().start)) 1 to 1 else 12 to 12
+            // 与作息无交集：钳到边界节
+            return if (en <= toMin(table.first().start)) Placement(1, 1, 0f, 1f)
+            else Placement(12, 12, 0f, 1f)
         }
-        return s to e
+        fun frac(secIndex0: Int, minutes: Int): Float {
+            val sec = table[secIndex0]
+            val dur = (toMin(sec.end) - toMin(sec.start)).coerceAtLeast(1)
+            return ((minutes - toMin(sec.start)).toFloat() / dur).coerceIn(0f, 1f)
+        }
+        val fs = frac(s - 1, st)
+        val fe = frac(e - 1, en).coerceAtLeast(0.05f)
+        return Placement(s, e, fs, fe)
     }
 
     private fun persist(context: Context) {
@@ -146,7 +169,9 @@ object CustomCourseStore {
                             .put("end", c.endSection)
                             .put("parity", c.parity)
                             .put("stime", c.startTime)
-                            .put("etime", c.endTime),
+                            .put("etime", c.endTime)
+                            .put("fs", c.fracStart.toDouble())
+                            .put("fe", c.fracEnd.toDouble()),
                     )
                 }
             }
@@ -189,6 +214,8 @@ object CustomCourseStore {
         isCustom = true,
         customId = id,
         customTime = timeText,
+        timeFracStart = fracStart,
+        timeFracEnd = fracEnd,
     )
 
     /** 小组件用：无状态读盘并按周过滤（不触碰 Compose 状态） */
@@ -217,6 +244,8 @@ object CustomCourseStore {
                 isCustom = true,
                 customId = o.optLong("id"),
                 customTime = if (stime.isNotEmpty() && etime.isNotEmpty()) "$stime-$etime" else "",
+                timeFracStart = o.optDouble("fs", 0.0).toFloat(),
+                timeFracEnd = o.optDouble("fe", 1.0).toFloat(),
             )
         }
     }.getOrDefault(emptyList())

@@ -16,6 +16,8 @@ data class Course(
     val isCustom: Boolean = false, // 自定义课程（非教务数据）
     val customId: Long = 0L,       // 自定义课程 id（删除用）
     val customTime: String = "",   // 自定义课程的具体时间（如 "18:30-20:00"，按节次模式为空）
+    val timeFracStart: Float = 0f, // 时间模式：在起始节次格内的纵向起点比例（0-1）
+    val timeFracEnd: Float = 1f,   // 时间模式：在结束节次格内的纵向终点比例（0-1）
 )
 
 /**
