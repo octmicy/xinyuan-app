@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -156,7 +157,10 @@ fun ProfileScreen(onLogout: () -> Unit) {
                     )
                     Spacer(Modifier.height(20.dp))
 
-                    Card(Modifier.fillMaxSize()) {
+                    Card(
+                        Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
                         Column(Modifier.padding(16.dp)) {
                             InfoRow("班级", info.className)
                             InfoRow("专业", info.major)
@@ -166,11 +170,16 @@ fun ProfileScreen(onLogout: () -> Unit) {
                     }
 
                     Spacer(Modifier.height(24.dp))
-                    OutlinedButton(onClick = {
-                        PortalApi.clearSession()
-                        JwxtApi.resetSso()
-                        onLogout()
-                    }) { Text("退出登录") }
+                    OutlinedButton(
+                        onClick = {
+                            PortalApi.clearSession()
+                            JwxtApi.resetSso()
+                            onLogout()
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("退出登录") }
 
                     Spacer(Modifier.height(16.dp))
                     Text(
@@ -181,59 +190,65 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
                     // ---- 项目地址 + 赞助 ----
                     Spacer(Modifier.height(28.dp))
-                    Text(
-                        "支持项目",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse("https://github.com/octmicy/xinxue-app"),
-                                        ),
-                                    )
-                                }
+                    Card(
+                        Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                "支持项目",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    Uri.parse("https://github.com/octmicy/xinxue-app"),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Code,
+                                    contentDescription = "GitHub",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "GitHub：octmicy/xinxue-app",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Rounded.Code,
-                            contentDescription = "GitHub",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            "GitHub：octmicy/xinxue-app",
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = { showDonate = true },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 18.dp,
-                            vertical = 8.dp,
-                        ),
-                    ) {
-                        Icon(
-                            Icons.Rounded.Favorite,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("赞助开发者", style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.height(2.dp))
+                            Button(
+                                onClick = { showDonate = true },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = 18.dp,
+                                    vertical = 8.dp,
+                                ),
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Favorite,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("赞助开发者", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
                     }
                 }
             }

@@ -16,12 +16,17 @@ private val LightColors = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = XycBlueContainer,
     onPrimaryContainer = XycBlueDark,
+    secondaryContainer = XycBlueContainer,
+    onSecondaryContainer = XycBlueDark,
 )
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFFADC6FF),
+    onPrimary = Color(0xFF0F3866),
     primaryContainer = Color(0xFF2A4A80),
     onPrimaryContainer = Color(0xFFD6E3FF),
+    secondaryContainer = Color(0xFF2A4A80),
+    onSecondaryContainer = Color(0xFFD6E3FF),
 )
 
 @Composable

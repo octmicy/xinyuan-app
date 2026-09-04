@@ -89,7 +89,7 @@ fun ScheduleScreen() {
     // Pager：一周一页，跟手拖拽 + 自动吸附
     val pagerState = rememberPagerState(initialPage = 0) { weeks.size.coerceAtLeast(1) }
     val displayWeek = pagerState.currentPage + 1
-
+    val curWeek = remember(weeks) { guessCurrentWeekFromList(weeks) }
     val context = LocalContext.current
 
     // 当前学期的周数据落盘给小组件并触发其刷新（非当前学期不落盘，避免带偏小组件）
@@ -150,7 +150,7 @@ fun ScheduleScreen() {
         if (list != null) {
             weeks = list
             val target = if (selXnm == curTerm.xnm && selTermNo == curTerm.termNo) {
-                guessCurrentWeekFromList(list)
+                guessCurrentWeekFromList(list) ?: 1
             } else 1
             ensureWeek(target)
             // 预加载相邻周：翻页大概率命中缓存，无需转圈
@@ -203,7 +203,28 @@ fun ScheduleScreen() {
                 Icon(Icons.AutoMirrored.Rounded.NavigateBefore, "上一周")
             }
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("第 $displayWeek 周", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("第 $displayWeek 周", style = MaterialTheme.typography.titleMedium)
+                    if (curWeek != null && displayWeek == curWeek &&
+                        selXnm == curTerm.xnm && selTermNo == curTerm.termNo
+                    ) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            Modifier
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .padding(horizontal = 7.dp, vertical = 1.dp),
+                        ) {
+                            Text(
+                                "本周",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
                 val rq = weeks.firstOrNull { it.zs == displayWeek }?.rq.orEmpty()
                 Text(
                     if (rq.isNotEmpty()) rq else TermUtils.xnmToLabel(selXnm),
@@ -456,19 +477,21 @@ private fun CourseCell(c: Course, modifier: Modifier, onClick: () -> Unit) {
     }
 }
 
-/** 用周次列表的 rq（每周一日期）精确定位当前周 */
-private fun guessCurrentWeekFromList(weeks: List<cn.edu.xyc.campus.data.model.WeekInfo>): Int {
-    if (weeks.isEmpty()) return 1
+/**
+ * 用周次列表的 rq 定位当前教学周（rq 为 "yyyy-MM-dd/yyyy-MM-dd" 区间或单日，取前 10 位比较）。
+ * 今天不在任何教学周内（学期未开始/已结束）返回 null——不能把第 1 周错当"本周"。
+ */
+private fun guessCurrentWeekFromList(weeks: List<cn.edu.xyc.campus.data.model.WeekInfo>): Int? {
+    if (weeks.isEmpty()) return null
     val today = java.text.SimpleDateFormat(
         "yyyy-MM-dd",
         java.util.Locale.US,
     ).format(java.util.Calendar.getInstance().time)
-    val sorted = weeks.sortedBy { it.zs }
-    var best = sorted.first().zs
-    for (w in sorted) {
-        if (w.rq <= today) best = w.zs else break
+    var best: Int? = null
+    for (w in weeks.sortedBy { it.zs }) {
+        if (w.rq.take(10) <= today) best = w.zs else break
     }
-    return best.coerceIn(1, sorted.last().zs)
+    return best
 }
 
 @Composable

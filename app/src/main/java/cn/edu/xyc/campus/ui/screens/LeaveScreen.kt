@@ -3,8 +3,10 @@ package cn.edu.xyc.campus.ui.screens
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,11 +19,13 @@ import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,12 +57,19 @@ fun LeaveScreen() {
     var mode by rememberSaveable { mutableStateOf("apply") }
     var loginDone by remember { mutableStateOf(false) }
     var loginFailed by remember { mutableStateOf(false) }
+    var progress by remember { mutableIntStateOf(0) }
 
     val webView = remember {
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.userAgentString = CampusHttp.MOBILE_UA
+        }
+    }
+
+    webView.webChromeClient = object : WebChromeClient() {
+        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+            progress = newProgress
         }
     }
 
@@ -145,19 +156,31 @@ fun LeaveScreen() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
+        if (!loginFailed && progress < 100) {
+            LinearProgressIndicator(
+                progress = { progress / 100f },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            )
+        }
         Box(Modifier.weight(1f)) {
             if (loginFailed) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                ) {
-                    Text(
-                        "学工系统登录失败，请退出 App 重新登录门户后重试",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                ErrorPane(
+                    "学工系统登录失败，通常是门户会话过期。可重试，或退出 App 重新登录门户。",
+                    onRetry = {
+                        val ticket = SessionStore.token
+                        if (ticket.isNullOrEmpty()) {
+                            Toast.makeText(context, "请先退出 App 重新登录门户", Toast.LENGTH_SHORT).show()
+                        } else {
+                            loginFailed = false
+                            loginDone = false
+                            progress = 0
+                            CampusHttp.syncToWebView()
+                            webView.loadUrl(XG_LOGIN_PREFIX + ticket)
+                        }
+                    },
+                )
             } else {
                 AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
             }
