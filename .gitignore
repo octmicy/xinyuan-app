@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
+.kotlin/
+
+# 签名材料：严禁入库
+*.jks
+*.keystore
+/keystore.properties
+
+# 接口探测存档：只保留脚本（截图/抓包页面含个人数据，不入公开仓库）
+/docs/probe/*
+!/docs/probe/*.py

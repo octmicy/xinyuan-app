@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-sp-mode="scroll">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新院助手 · 开发方案</title>
+<style>
+/* :root 只是变量插槽：值为无彩占位灰，配色由 beautify 覆写决定（见 beautify/beautify-guide.md）。
+   下面的排版仅为「结构可读」的最低限度基线，agent 美化时应整体重写，不必沿用。 */
+:root {
+  --accent: #8f8f8f; --accent2: #8f8f8f;
+  --bg: #121212; --panel: #1c1c1c; --text: #e9e9e9; --muted: #9b9b9b;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", Segoe UI, sans-serif;
+  line-height: 1.7; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 20px 80px; }
+.hero { padding: 96px 20px 56px; text-align: center; }
+.hero h1 {
+  font-size: clamp(28px, 5vw, 46px); margin: 0 0 18px; line-height: 1.25; color: var(--text);
+}
+.hero-summary {
+  max-width: 720px; margin: 0 auto; font-size: clamp(15px, 2.2vw, 19px);
+  color: var(--text);
+}
+.block-card {
+  background: var(--panel); border: 1px solid rgba(255,255,255,.06);
+  border-radius: 16px; padding: 28px 30px; margin: 22px 0;
+}
+.block-card h1, .block-card h2 { margin-top: 4px; color: var(--accent2); }
+.block-card h2 { font-size: 22px; border-left: 4px solid var(--accent); padding-left: 12px; }
+.block-card h3 { font-size: 18px; color: var(--text); }
+.block-card p { color: var(--text); }
+.block-card ul, .block-card ol { padding-left: 22px; }
+.block-card li { margin: 6px 0; }
+a { color: var(--accent2); }
+code {
+  background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px;
+  font-family: SFMono-Regular, Consolas, monospace; font-size: .92em;
+}
+pre {
+  background: var(--panel); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px; padding: 16px; overflow: auto;
+}
+pre code { background: none; padding: 0; }
+.mermaid {
+  background: var(--panel); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px; padding: 20px; margin: 16px 0; text-align: center; overflow-x: auto;
+}
+.mermaid svg { max-width: 100%; height: auto; }
+.mermaid-loading {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--muted); font-size: 14px;
+}
+.mermaid-loading::before {
+  content: ""; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.2); border-top-color: var(--accent);
+  animation: mermaidSpin .8s linear infinite;
+}
+@keyframes mermaidSpin { to { transform: rotate(360deg); } }
+blockquote {
+  margin: 12px 0; padding: 8px 16px; border-left: 4px solid var(--accent);
+  background: rgba(255,255,255,.04); border-radius: 0 10px 10px 0; color: var(--muted);
+}
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+th, td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; }
+th { color: var(--accent2); font-weight: 600; }
+figure { margin: 14px 0; }
+figure img { width: 100%; border-radius: 12px; }
+figcaption { color: var(--muted); font-size: 13px; text-align: center; margin-top: 8px; }
+img { max-width: 100%; }
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+footer { text-align: center; color: var(--muted); font-size: 12px; padding: 40px 0 0; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .mermaid-loading::before { animation: none; }
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>新院助手 · 开发方案</h1>
+  <p class="hero-summary">为 新余学院（xyc.edu.cn） 开发一款安卓原生 App，替代&quot;打开浏览器 → 登录移动门户 → 跳转教务系统&quot;的繁琐流程，把<strong>课表、成绩、考试、个人信息</strong>等高频功能做成原生界面，ehall 其他应用做入口聚合。</p>
+</header>
+<main class="wrap">
+<section class="reveal block-card">
+<blockquote><p>对齐日期：2026-09-02　|　状态：需求已对齐，待搭环境开发</p></blockquote>
+</section>
+<section class="reveal block-card">
+<h2>一、项目概述</h2>
+<p>为 新余学院（xyc.edu.cn） 开发一款安卓原生 App，替代&quot;打开浏览器 → 登录移动门户 → 跳转教务系统&quot;的繁琐流程，把<strong>课表、成绩、考试、个人信息</strong>等高频功能做成原生界面，ehall 其他应用做入口聚合。</p>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>决策</th></tr></thead><tbody><tr><td>技术路线</td><td>原生 Kotlin + Jetpack Compose（Material 3 现代风）</td></tr><tr><td>使用范围</td><td>先自用跑通，代码按可开源发布标准写（账号仅存本机、参数可配置）</td></tr><tr><td>最低支持</td><td>Android 8.0（API 26），覆盖绝大多数在用手机</td></tr><tr><td>参考项目</td><td>544r/wzu-assistant（架构模板）、paditianxiu/jxh_next（同省院校功能1:1）、wyvern1723/sachet（正方V9.0 API 最全参考，MIT）</td></tr></tbody></table></div>
+</section>
+<section class="reveal block-card">
+<h2>二、账号与登录链路（核心技术点）</h2>
+<p><strong>已确认的关键事实</strong>：教务系统（zfjwxt）账号密码独立且不可获取，必须由门户（ehallmobile）登录后注入式跳转。</p>
+<pre><code>┌─ App 内置登录页 ──────────────────────────────┐
+│  输入：学号 + 门户密码                          │
+└──────────────┬───────────────────────────────┘
+               ▼ ① POST 门户登录接口（密码可能需 RSA/SM2 加密，抓包确认）
+     ehallmobile.xyc.edu.cn/mobile  ← 获得门户会话 Cookie
+               ▼ ② 请求&quot;教务系统&quot;应用入口链接（门户/三方列表中获取）
+               ▼ ③ 跟随 SSO 重定向链（302 数跳，携带一次性 ticket/token）
+     zfjwxt.xyc.edu.cn/jwglxt  ← 落地拿到教务 JSESSIONID 会话
+               ▼ ④ 用教务会话调用业务 API
+     • 课表  /jwglxt/kbdy/...   （xnm=学年, xqm=学期）
+     • 成绩  /jwglxt/cjcx/cjcx_cxXsKccjList.html?gnmkdm=N305005
+     • 考试  /jwglxt/xskbcx/... （具体 gnmdm 以抓包为准）
+     • 个人信息 /jwglxt/grxx/... 或 xsxxx</code></pre>
+<p><strong>待验证项（开发第一步）</strong>：① 门户登录接口是否加密密码、是否有无验证码情况；② SSO 跳转链具体形态（CAS ticket 还是自研 token）；③ 会话有效期与自动续期方式。验证手段：真机浏览器 F12 / 抓包工具（HttpCanary 或电脑端 Fiddler），或直接用脚本模拟。</p>
+</section>
+<section class="reveal block-card">
+<h2>三、功能清单与优先级</h2>
+<div class="table-wrap"><table><thead><tr><th>优先级</th><th>功能</th><th>说明</th></tr></thead><tbody><tr><td>P0</td><td>登录 + 会话管理</td><td>门户登录、SSO 跳转、Cookie 本机加密存储（EncryptedSharedPreferences）、失效自动重登</td></tr><tr><td>P0</td><td>课表查询</td><td>周视图网格、周次切换、今日高亮、单双周、课程颜色标记、本地缓存（离线可看）</td></tr><tr><td>P0</td><td>成绩查询</td><td>按学期筛选、加权 GPA / 学分自动计算</td></tr><tr><td>P0</td><td>个人信息</td><td>学籍卡片：姓名、学号、学院专业班级、培养层次等</td></tr><tr><td>P1</td><td>考试安排</td><td>时间/地点/座位号，本地缓存</td></tr><tr><td>P1</td><td>ehall 应用入口聚合</td><td>拉取 third 页应用列表做宫格首页，点击自动带会话内嵌打开</td></tr><tr><td>P2</td><td>桌面小组件</td><td>今日课程 Glance Widget</td></tr><tr><td>P2</td><td>成绩更新提醒</td><td>WorkManager 定期检查（默认 1~2 小时一次，克制频率防封禁），新成绩系统通知</td></tr></tbody></table></div>
+</section>
+<section class="reveal block-card">
+<h2>四、技术选型</h2>
+<div class="table-wrap"><table><thead><tr><th>层</th><th>选型</th><th>理由</th></tr></thead><tbody><tr><td>UI</td><td>Kotlin 2.x + Compose BOM + Material 3 + 动态取色</td><td>对齐决策</td></tr><tr><td>网络</td><td>OkHttp + Retrofit（CookieJar 管理）</td><td>正方接口是表单/JSON 混合，OkHttp 处理重定向链最可控</td></tr><tr><td>存储</td><td>DataStore（配置）+ Room（课表/成绩缓存）</td><td>离线秒开</td></tr><tr><td>安全</td><td>EncryptedSharedPreferences 存账号密码</td><td>按可发布标准</td></tr><tr><td>小组件</td><td>Glance</td><td>Compose 官方组件库</td></tr><tr><td>后台</td><td>WorkManager</td><td>成绩轮询</td></tr><tr><td>构建</td><td>AGP 8.5+ / JDK 17 / minSdk 26 / targetSdk 34</td><td>对齐 wzu-assistant</td></tr></tbody></table></div>
+</section>
+<section class="reveal block-card">
+<h2>五、开发里程碑</h2>
+<div class="table-wrap"><table><thead><tr><th>阶段</th><th>内容</th><th>产出</th></tr></thead><tbody><tr><td>M0 环境搭建</td><td>JDK17 + Android Studio（装 D 盘，C 盘空间不足！）+ SDK + 真机 USB 调试</td><td>能编译运行 Hello Compose</td></tr><tr><td>M1 登录打通</td><td>抓包分析 SSO 链路 → 脚本验证 → App 内登录页</td><td>App 内登录成功拿到教务会话</td></tr><tr><td>M2 三件套</td><td>课表/成绩/个人信息原生页面 + 本地缓存</td><td>核心可用版本</td></tr><tr><td>M3 扩展</td><td>考试安排 + ehall 入口聚合</td><td>v0.5</td></tr><tr><td>M4 打磨</td><td>小组件 + 成绩提醒 + 深色模式 + 图标命名</td><td>v1.0</td></tr></tbody></table></div>
+</section>
+<section class="reveal block-card">
+<h2>六、风险与应对</h2>
+<div class="table-wrap"><table><thead><tr><th>风险</th><th>应对</th></tr></thead><tbody><tr><td>门户登录密码加密/风控未知</td><td>M1 优先抓包验证；必要时 WebView 完成首次登录、Cookie 复用</td></tr><tr><td>教务接口有频率限制/封禁</td><td>请求克制 + 本地缓存为主、联网刷新为辅</td></tr><tr><td>学校升级接口导致功能失效</td><td>接口层集中封装（对齐 wzu-assistant 的 api-schema.json 做法），单点修复</td></tr><tr><td>C 盘剩余空间不足</td><td>AS 与 SDK 全部装 D 盘：Studio → <code>D:\Android\AndroidStudio</code>，SDK → <code>D:\Android\Sdk</code>，GRADLE_USER_HOME → <code>D:\Android\.gradle</code></td></tr></tbody></table></div>
+</section>
+<section class="reveal block-card">
+<h2>七、环境搭建清单（下一步行动）</h2>
+<ol><li>装 JDK 17（Temurin zip 版解压 D 盘即可，无需安装器）</li><li>下载 Android Studio（developer.android.com/studio），安装路径选 D 盘</li><li>AS 内 SDK Manager：装 SDK Platform 34 + Platform-Tools；SDK 路径改到 <code>D:\Android\Sdk</code></li><li>手机：设置 → 关于手机 → 连点版本号开启开发者模式 → 开发者选项打开 USB 调试</li><li>数据线连接，AS 中 Run 即可真机安装</li></ol>
+</section>
+<section class="reveal block-card">
+<h2>八、App 命名候选（待定）</h2>
+<p>「新院助手」/「今日新院」/「XY校园通」/「泉石校园」（新余有泉石之胜）——后续定。</p>
+</section>
+<footer>由 WorkBuddy 资料库生成</footer>
+</main>
+<script>
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var els = document.querySelectorAll('.reveal');
+  if (reduce || !('IntersectionObserver' in window)) {
+    els.forEach(function (el) { el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12 });
+  els.forEach(function (el) { io.observe(el); });
+})();
+</script>
+<script>
+(function () {
+  if (!document.querySelector('.mermaid') || window.__mermaidLoaded) return;
+  window.__mermaidLoaded = true;
+  function fallback() {
+    document.querySelectorAll('.mermaid').forEach(function (el) {
+      if (el.getAttribute('data-mermaid-done')) return;
+      var pre = document.createElement('pre'), code = document.createElement('code');
+      code.textContent = el.getAttribute('data-mermaid-src') || el.textContent;
+      pre.appendChild(code); el.replaceWith(pre);
+    });
+  }
+  window.__mermaidFallback = fallback;
+  var s = document.createElement('script');
+  s.type = 'module';
+  s.textContent =
+    'import("https://registry.npmmirror.com/mermaid/11.4.1/files/dist/mermaid.esm.min.mjs").then(function(mod){'
+    +   'var mermaid = mod.default;'
+    +   'var cs = getComputedStyle(document.documentElement);'
+    +   'function v(n,d){return (cs.getPropertyValue(n).trim()||d);}'
+    +   'mermaid.initialize({startOnLoad:false,theme:"base",themeVariables:{'
+    +     'primaryColor:v("--panel","#1c1c1c"),primaryBorderColor:v("--accent","#8f8f8f"),'
+    +     'primaryTextColor:v("--text","#e9e9e9"),secondaryColor:v("--accent2","#8f8f8f"),'
+    +     'tertiaryColor:v("--bg","#121212"),lineColor:v("--accent2","#8f8f8f"),'
+    +     'textColor:v("--text","#e9e9e9"),mainBkg:v("--panel","#1c1c1c"),'
+    +     'nodeBorder:v("--accent","#8f8f8f"),clusterBkg:v("--bg","#121212"),'
+    +     'clusterBorder:v("--accent","#8f8f8f"),edgeLabelBackground:v("--panel","#1c1c1c"),'
+    +     'fontFamily:"-apple-system, PingFang SC, Microsoft YaHei, Segoe UI, sans-serif"}});'
+    +   'document.querySelectorAll(".mermaid").forEach(function(el){el.textContent=el.getAttribute("data-mermaid-src")||el.textContent;});'
+    +   'return mermaid.run({querySelector:".mermaid"});'
+    + '}).then(function(){'
+    +   'document.querySelectorAll(".mermaid").forEach(function(el){el.setAttribute("data-mermaid-done","1");});'
+    + '}).catch(function(){window.__mermaidFallback&&window.__mermaidFallback();});';
+  document.body.appendChild(s);
+  setTimeout(fallback, 8000);  // CDN 长时间无响应也退回代码块
+})();
+</script>
+</body>
+</html>
