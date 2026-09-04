@@ -515,12 +515,16 @@ private fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Cours
     }
 }
 
-/** 已按时间比例排好位置的课（同组并排展示） */
-private data class PlacedGroup(
+/** 已按时间比例排好位置的课（同簇内分栏并排，保证每门课都可见） */
+private class PlacedGroup(
     val top: androidx.compose.ui.unit.Dp,
     val bottom: androidx.compose.ui.unit.Dp,
     val courses: List<Course>,
-)
+) {
+    var lane: Int = 0
+    var xFrac: Float = 0f
+    var widthFrac: Float = 1f
+}
 
 @Composable
 private fun RowScope.DayColumn(
@@ -528,12 +532,13 @@ private fun RowScope.DayColumn(
     cellH: androidx.compose.ui.unit.Dp,
     onCourseClick: (Course) -> Unit,
 ) {
-    Box(
+    androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier
             .weight(1f)
             .fillMaxHeight(),
     ) {
-        // 同节次区间且同时间比例的课并排；时间模式的课按真实时间比例占据格子
+        val colW = maxWidth
+        // 同节次区间且同时间比例的课为一组；时间模式的课按真实时间比例占据格子
         val groups = dayCourses
             .groupBy {
                 listOf(
@@ -550,12 +555,44 @@ private fun RowScope.DayColumn(
                 )
             }
             .sortedBy { it.top }
+
+        // 时间重叠的组聚成一簇；簇内贪心分道（列），每道等宽并排——下方课程不会被盖住
+        val clusters = mutableListOf<MutableList<PlacedGroup>>()
+        var clusterMaxBottom = (-1).dp
+        groups.forEach { g ->
+            if (clusters.isEmpty() || g.top >= clusterMaxBottom) {
+                clusters += mutableListOf(g)
+                clusterMaxBottom = g.bottom
+            } else {
+                clusters.last() += g
+                clusterMaxBottom = maxOf(clusterMaxBottom, g.bottom)
+            }
+        }
+        clusters.forEach { cluster ->
+            val laneBottoms = mutableListOf<androidx.compose.ui.unit.Dp>()
+            cluster.forEach { g ->
+                val lane = laneBottoms.indexOfFirst { it <= g.top }
+                if (lane == -1) {
+                    laneBottoms += g.bottom
+                    g.lane = laneBottoms.size - 1
+                } else {
+                    laneBottoms[lane] = g.bottom
+                    g.lane = lane
+                }
+            }
+            val laneCount = laneBottoms.size
+            cluster.forEach { g ->
+                g.xFrac = g.lane.toFloat() / laneCount
+                g.widthFrac = 1f / laneCount
+            }
+        }
+
         groups.forEach { g ->
             Row(
                 Modifier
-                    .offset(y = g.top)
-                    .height(g.bottom - g.top)
-                    .fillMaxWidth(),
+                    .offset(x = colW * g.xFrac, y = g.top)
+                    .width(colW * g.widthFrac)
+                    .height(g.bottom - g.top),
             ) {
                 g.courses.forEach { c ->
                     CourseCell(
@@ -568,41 +605,6 @@ private fun RowScope.DayColumn(
                     )
                 }
             }
-        }
-        // 时间交叉的区域画斜杠阴影，提示课程冲突
-        val hatchRects = buildList {
-            for (i in groups.indices) {
-                for (j in i + 1 until groups.size) {
-                    val top = maxOf(groups[i].top, groups[j].top)
-                    val bottom = minOf(groups[i].bottom, groups[j].bottom)
-                    if (bottom - top > 3.dp) add(top to bottom)
-                }
-            }
-        }
-        hatchRects.forEach { (top, bottom) ->
-            Box(
-                Modifier
-                    .offset(y = top)
-                    .height(bottom - top)
-                    .fillMaxWidth()
-                    .drawBehind {
-                        // 必须裁剪到本格子范围，否则斜线会延伸到相邻列
-                        clipRect(0f, 0f, size.width, size.height) {
-                            val stroke = 2.dp.toPx()
-                            val step = 9.dp.toPx()
-                            var x = -size.height
-                            while (x < size.width) {
-                                drawLine(
-                                    color = Color(0x40374760),
-                                    start = Offset(x, size.height),
-                                    end = Offset(x + size.height, 0f),
-                                    strokeWidth = stroke,
-                                )
-                                x += step
-                            }
-                        }
-                    },
-            )
         }
     }
 }
