@@ -3,6 +3,7 @@ package cn.edu.xyc.campus.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,6 +31,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -136,17 +141,28 @@ private fun AppCell(app: ThirdApp, iconRes: Int, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(4.dp),
     ) {
-        Image(
-            painter = androidx.compose.ui.res.painterResource(iconRes),
-            contentDescription = app.name,
-            modifier = Modifier
+        // 白色圆角卡片托底，贴纸图标带投影
+        Box(
+            Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .padding(horizontal = 4.dp),
-        )
+                .padding(horizontal = 4.dp)
+                .shadow(3.dp, RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.White)
+                .padding(12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = androidx.compose.ui.res.painterResource(iconRes),
+                contentDescription = app.name,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Spacer(Modifier.height(6.dp))
         Text(
             app.name,
