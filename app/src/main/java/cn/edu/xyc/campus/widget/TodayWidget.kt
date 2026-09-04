@@ -115,23 +115,22 @@ class TodayWidget : GlanceAppWidget() {
             .filter { it.dayOfWeek == xqj }
             .sortedWith(compareBy({ it.startSection }, { it.name }))
 
-        val dateText = buildString {
-            append("${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日 ")
-            append(WEEKDAYS[cal.get(Calendar.DAY_OF_WEEK) - 1])
-            when (offset) {
-                0 -> append(" · 今天")
-                1 -> append(" · 明天")
-                -1 -> append(" · 昨天")
-                else -> append(" · ${if (offset > 0) "+" else ""}$offset 天")
-            }
+        val dateShort = "${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日 " +
+            WEEKDAYS[cal.get(Calendar.DAY_OF_WEEK) - 1]
+        val relTag = when (offset) {
+            0 -> ""
+            1 -> "明天"
+            -1 -> "昨天"
+            else -> (if (offset > 0) "+" else "") + offset + "天"
         }
 
-        provideContent { Content(dateText, snap, week == null, courses, offset) }
+        provideContent { Content(dateShort, relTag, snap, week == null, courses, offset) }
     }
 
     @Composable
     private fun Content(
-        dateText: String,
+        dateShort: String,
+        relTag: String,
         snap: TodayStore.Snapshot?,
         noCurrentWeek: Boolean,
         courses: List<Course>,
@@ -160,55 +159,85 @@ class TodayWidget : GlanceAppWidget() {
                 .padding(if (compact) 6.dp else 10.dp),
         ) {
             Column {
+                // 第一行：标题 + 相对日期标签
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!compact) {
+                    Text(
+                        "今日课程",
+                        style = TextStyle(
+                            color = ColorProvider(Primary),
+                            fontSize = if (compact) 11.sp else 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        maxLines = 1,
+                    )
+                    Spacer(GlanceModifier.defaultWeight())
+                    if (relTag.isNotEmpty()) {
                         Text(
-                            "今日课程",
-                            style = TextStyle(
-                                color = ColorProvider(Primary),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
+                            relTag,
+                            style = TextStyle(color = ColorProvider(Secondary), fontSize = 10.sp),
                             maxLines = 1,
                         )
-                        Spacer(GlanceModifier.width(6.dp))
                     }
-                    // ‹ › 翻日期；点日期回今天（非今天时后面跟「今」按钮）
+                }
+                Spacer(GlanceModifier.height(2.dp))
+                // 第二行：日期控制条（‹ 日期 › 大热区，点日期/今回今天）
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val arrowSize = if (compact) 15.sp else 17.sp
+                    val arrowPad = GlanceModifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     Text(
                         "‹",
-                        style = TextStyle(color = ColorProvider(Primary), fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                        style = TextStyle(
+                            color = ColorProvider(Primary),
+                            fontSize = arrowSize,
+                            fontWeight = FontWeight.Bold,
+                        ),
                         modifier = GlanceModifier
                             .clickable(actionRunCallback<DayShiftAction>(actionParametersOf(shiftDeltaKey to -1)))
-                            .padding(horizontal = 3.dp, vertical = 1.dp),
+                            .then(arrowPad),
                     )
-                    Spacer(GlanceModifier.width(2.dp))
                     Text(
-                        dateText,
-                        style = TextStyle(color = ColorProvider(Secondary), fontSize = 10.sp),
+                        dateShort,
+                        style = TextStyle(
+                            color = ColorProvider(Primary),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = androidx.glance.text.TextAlign.Center,
+                        ),
                         maxLines = 1,
                         modifier = GlanceModifier
                             .defaultWeight()
-                            .clickable(actionRunCallback<DayResetAction>()),
+                            .clickable(actionRunCallback<DayResetAction>())
+                            .padding(vertical = 4.dp),
                     )
                     if (offset != 0) {
                         Text(
                             "今",
-                            style = TextStyle(color = ColorProvider(Primary), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            style = TextStyle(
+                                color = ColorProvider(Primary),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
                             modifier = GlanceModifier
+                                .background(ColorProvider(Color(0xFFD6E3FF)))
+                                .cornerRadius(6.dp)
                                 .clickable(actionRunCallback<DayResetAction>())
-                                .padding(horizontal = 3.dp, vertical = 1.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                         Spacer(GlanceModifier.width(2.dp))
                     }
                     Text(
                         "›",
-                        style = TextStyle(color = ColorProvider(Primary), fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                        style = TextStyle(
+                            color = ColorProvider(Primary),
+                            fontSize = arrowSize,
+                            fontWeight = FontWeight.Bold,
+                        ),
                         modifier = GlanceModifier
                             .clickable(actionRunCallback<DayShiftAction>(actionParametersOf(shiftDeltaKey to 1)))
-                            .padding(horizontal = 3.dp, vertical = 1.dp),
+                            .then(arrowPad),
                     )
                 }
-                Spacer(GlanceModifier.height(if (compact) 4.dp else 6.dp))
+                Spacer(GlanceModifier.height(if (compact) 3.dp else 5.dp))
                 when {
                     snap == null || snap.weeks.isEmpty() ->
                         Empty("打开 App 同步课表", compact)
