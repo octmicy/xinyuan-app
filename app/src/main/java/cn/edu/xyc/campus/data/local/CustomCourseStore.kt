@@ -191,6 +191,9 @@ object CustomCourseStore {
         else -> "每周"
     }
 
+    /** 学期总表用：全部自定义课（不分周次过滤，重复规则标注在 weekText） */
+    fun allAsCourses(): List<Course> = courses.map { it.toCourse() }
+
     /** 课表网格用：某教学周的自定义课（按单双周过滤），转成 Course 直接复用网格渲染 */
     fun forWeek(zs: Int): List<Course> = courses
         .filter { matchParity(it.parity, zs) }

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.edu.xyc.campus.R
 import cn.edu.xyc.campus.data.local.CredStore
+import cn.edu.xyc.campus.data.local.IntroStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.StoredCredential
 import cn.edu.xyc.campus.data.local.TodayStore
@@ -46,6 +47,7 @@ fun AppRoot() {
     val scope = rememberCoroutineScope()
     var loggedIn by rememberSaveable { mutableStateOf(false) }
     var autoChecking by rememberSaveable { mutableStateOf(CredStore.load() != null) }
+    var introDone by rememberSaveable { mutableStateOf(IntroStore.isDone(context)) }
     var prefill by remember { mutableStateOf<StoredCredential?>(null) }
 
     // 冷启动静默重登：解决"清理后台后要重新输入账号密码"
@@ -73,6 +75,11 @@ fun AppRoot() {
     }
 
     when {
+        // 首次打开：新手引导优先（完成后进入自动登录/登录流程）
+        !introDone -> OnboardingScreen(onDone = {
+            IntroStore.setDone(context)
+            introDone = true
+        })
         autoChecking -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(

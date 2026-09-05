@@ -30,11 +30,15 @@ object ScheduleCache {
     /** 门户第三方应用列表：key = "APPS" */
     val applications = mutableStateMapOf<String, List<ThirdApp>>()
 
+    /** 学期整表（全部课程）：key = "T:xnm-xqm" */
+    val termSchedule = mutableStateMapOf<String, List<Course>>()
+
     private val inFlight = mutableSetOf<String>()
 
     fun weeksKey(xnm: String, xqm: String) = "W:$xnm-$xqm"
     fun weekKey(xnm: String, xqm: String, zs: Int) = "D:$xnm-$xqm-$zs"
     fun gradeKey(xnm: String, xqm: String) = "G:$xnm-$xqm"
+    fun termKey(xnm: String, xqm: String) = "T:$xnm-$xqm"
 
     @Synchronized
     fun tryMark(key: String): Boolean =
@@ -54,6 +58,7 @@ object ScheduleCache {
         gradeData.clear()
         profileData.clear()
         applications.clear()
+        termSchedule.clear()
         inFlight.clear()
     }
 }
