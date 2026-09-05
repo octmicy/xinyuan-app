@@ -17,3 +17,9 @@ build/
 # 接口探测存档：只保留脚本（截图/抓包页面含个人数据，不入公开仓库）
 /docs/probe/*
 !/docs/probe/*.py
+
+# 本地开发资料：不入公开仓库
+/HANDOVER.md
+/docs/
+/design/
+/tools/

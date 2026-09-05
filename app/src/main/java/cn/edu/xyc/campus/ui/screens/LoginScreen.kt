@@ -205,13 +205,13 @@ fun LoginScreen(
 
             Spacer(Modifier.height(28.dp))
             Text(
-                "开源 · github.com/octmicy/xinxue-app",
+                "开源 · github.com/octmicy/xinyuan-app",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.clickable {
                     runCatching {
                         context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/octmicy/xinxue-app")),
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/octmicy/xinyuan-app")),
                         )
                     }
                 },
