@@ -1,4 +1,4 @@
-# 新院助手 xinxue-app
+# 新院助手 xinyuan-app
 
 新余学院校园服务安卓客户端（**非官方、开源**）。原生 Kotlin + Jetpack Compose，数据直连学校各系统，无自建服务端，凭证本机加密存储。
 
