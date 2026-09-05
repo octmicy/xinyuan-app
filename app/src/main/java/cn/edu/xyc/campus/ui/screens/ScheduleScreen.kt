@@ -490,7 +490,12 @@ private val DAY_NAMES = listOf("周一", "周二", "周三", "周四", "周五",
 
 /** 一屏式网格：7 列均分屏宽、12 节均分剩余高度，随分辨率自适应（学期总表复用） */
 @Composable
-internal fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Course) -> Unit) {
+internal fun Grid(
+    courses: List<Course>,
+    timeMain: Boolean,
+    onCourseClick: (Course) -> Unit,
+    stack: Boolean = false, // 学期总表模式：同一时段多门课纵向堆叠而非并排
+) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val cellH = maxHeight / 12
         val table = SectionTimes.table(timeMain)
@@ -537,6 +542,7 @@ internal fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Cour
                     dayCourses = courses.filter { it.dayOfWeek == day },
                     cellH = cellH,
                     onCourseClick = onCourseClick,
+                    stack = stack,
                 )
             }
         }
@@ -599,6 +605,7 @@ private fun RowScope.DayColumn(
     dayCourses: List<Course>,
     cellH: androidx.compose.ui.unit.Dp,
     onCourseClick: (Course) -> Unit,
+    stack: Boolean = false,
 ) {
     Box(
         Modifier
@@ -607,23 +614,50 @@ private fun RowScope.DayColumn(
     ) {
         val groups = remember(dayCourses, cellH) { computePlacements(dayCourses, cellH) }
         groups.forEach { g ->
-            Row(
-                Modifier
-                    .offset(y = g.top)
-                    .height(g.bottom - g.top)
-                    .fillMaxWidth(),
-            ) {
-                g.courses.forEach { c ->
-                    CourseCell(
-                        c = c,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize()
-                            .padding(1.dp),
-                        ovTop = g.ovTop,
-                        ovBottom = g.ovBottom,
-                        onClick = { onCourseClick(c) },
-                    )
+            if (stack && g.courses.size > 1) {
+                // 学期总表模式：同一时段多门课纵向堆叠，保证每门课可读可点
+                Column(
+                    Modifier
+                        .offset(y = g.top)
+                        .height(g.bottom - g.top)
+                        .fillMaxWidth(),
+                ) {
+                    val subH = (g.bottom - g.top) / g.courses.size
+                    g.courses.forEach { c ->
+                        Box(
+                            Modifier
+                                .height(subH)
+                                .fillMaxWidth()
+                                .padding(horizontal = 1.dp),
+                        ) {
+                            CourseCell(
+                                c = c,
+                                modifier = Modifier.fillMaxSize(),
+                                stacked = true,
+                                onClick = { onCourseClick(c) },
+                            )
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    Modifier
+                        .offset(y = g.top)
+                        .height(g.bottom - g.top)
+                        .fillMaxWidth(),
+                ) {
+                    g.courses.forEach { c ->
+                        CourseCell(
+                            c = c,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                .padding(1.dp),
+                            ovTop = g.ovTop,
+                            ovBottom = g.ovBottom,
+                            onClick = { onCourseClick(c) },
+                        )
+                    }
                 }
             }
         }
@@ -683,6 +717,7 @@ private fun CourseCell(
     modifier: Modifier,
     ovTop: Float = 0f,
     ovBottom: Float = 0f,
+    stacked: Boolean = false,
     onClick: () -> Unit,
 ) {
     val idx = (c.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
@@ -738,17 +773,35 @@ private fun CourseCell(
                 lineHeight = 10.sp,
                 color = fg,
                 fontWeight = FontWeight.Bold,
-                maxLines = 4,
+                maxLines = if (stacked) 1 else 4,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                "@${c.room}",
-                fontSize = 7.sp,
-                lineHeight = 9.sp,
-                color = fg.copy(alpha = 0.85f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (stacked) {
+                // 学期总表堆叠模式：教室+周次一行带过，详情点开看
+                val info = listOf(
+                    c.room.ifEmpty { null }?.let { "@$it" },
+                    c.weekText.ifEmpty { null },
+                ).filterNotNull().joinToString(" · ")
+                if (info.isNotEmpty()) {
+                    Text(
+                        info,
+                        fontSize = 7.sp,
+                        lineHeight = 8.sp,
+                        color = fg.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
+                Text(
+                    "@${c.room}",
+                    fontSize = 7.sp,
+                    lineHeight = 9.sp,
+                    color = fg.copy(alpha = 0.85f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
