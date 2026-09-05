@@ -234,6 +234,9 @@ fun ScheduleScreen() {
                 )
             }
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = { showTermSchedule = true }) {
+                Text("学期课表", style = MaterialTheme.typography.labelMedium)
+            }
             IconButton(enabled = !exporting, onClick = {
                 exporting = true
                 scope.launch {
@@ -261,9 +264,6 @@ fun ScheduleScreen() {
                     }
                 }
             }) { Icon(Icons.Rounded.IosShare, "导出课表图片") }
-            TextButton(onClick = { showTermSchedule = true }) {
-                Text("学期课表", style = MaterialTheme.typography.labelMedium)
-            }
             IconButton(onClick = { showAddCourse = true }) {
                 Icon(Icons.Rounded.Add, "添加自定义课程")
             }

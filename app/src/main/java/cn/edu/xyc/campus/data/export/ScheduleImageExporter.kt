@@ -138,15 +138,23 @@ object ScheduleImageExporter {
                         canvas.withTranslation(rect.left + 10f, rect.top + 10f) { nameLayout.draw(this) }
 
                         if (c.room.isNotEmpty()) {
+                            // 教室文字限宽一行省略，避免长教室名溢出格子
+                            val roomText = "@${c.room}"
                             val roomPaint = TextPaint().apply {
                                 color = fgInt; textSize = 24f; isAntiAlias = true; alpha = 220
                             }
-                            canvas.drawText(
-                                "@${c.room}",
-                                rect.left + 10f,
-                                rect.bottom - 14f,
-                                roomPaint,
-                            )
+                            val roomLayout = StaticLayout.Builder
+                                .obtain(
+                                    roomText, 0, roomText.length, roomPaint,
+                                    (rect.width() - 20f).toInt().coerceAtLeast(60),
+                                )
+                                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                                .setMaxLines(1)
+                                .setEllipsize(TextUtils.TruncateAt.END)
+                                .build()
+                            canvas.withTranslation(rect.left + 10f, rect.bottom - 12f - roomLayout.height) {
+                                roomLayout.draw(this)
+                            }
                         }
                     }
                 }
