@@ -1,7 +1,14 @@
 package cn.edu.xyc.campus.ui.screens
 
+import android.content.ContentValues
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,13 +36,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,12 +66,20 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
+import cn.edu.xyc.campus.data.export.ScheduleImageExporter
 import cn.edu.xyc.campus.data.local.CustomCourseStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.TodayStore
@@ -71,7 +90,10 @@ import cn.edu.xyc.campus.data.remote.JwxtResult
 import cn.edu.xyc.campus.data.remote.TermUtils
 import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 internal val COURSE_COLORS = listOf(
     Color(0xFFD6E4FF) to Color(0xFF1D3F8C),
@@ -98,6 +120,8 @@ fun ScheduleScreen() {
     var showAddCourse by rememberSaveable { mutableStateOf(false) }
     var showTermSchedule by rememberSaveable { mutableStateOf(false) }
     var timeMain by rememberSaveable { mutableStateOf(true) } // 左列作息表：主教学楼/其他教学楼
+    var exportResult by remember { mutableStateOf<Pair<File, Bitmap>?>(null) }
+    var exporting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val term = TermUtils.of(selXnm, selTermNo)
 
@@ -210,6 +234,33 @@ fun ScheduleScreen() {
                 )
             }
             Spacer(Modifier.weight(1f))
+            IconButton(enabled = !exporting, onClick = {
+                exporting = true
+                scope.launch {
+                    val zs = displayWeek
+                    val key = ScheduleCache.weekKey(selXnm, term.xqm, zs)
+                    val weekCourses = (ScheduleCache.weekData[key]?.first ?: emptyList()) +
+                        CustomCourseStore.forWeek(zs)
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val file = ScheduleImageExporter.export(
+                                context,
+                                weekCourses,
+                                "${TermUtils.xnmToLabel(selXnm)} 第${selTermNo}学期",
+                                "第${zs}周",
+                                weeks.firstOrNull { it.zs == zs }?.rq.orEmpty(),
+                            )
+                            file to BitmapFactory.decodeFile(file.absolutePath)
+                        }.getOrNull()
+                    }
+                    exporting = false
+                    if (result != null && result.second != null) {
+                        exportResult = result
+                    } else {
+                        Toast.makeText(context, "导出失败，请重试", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }) { Icon(Icons.Rounded.IosShare, "导出课表图片") }
             TextButton(onClick = { showTermSchedule = true }) {
                 Text("学期课表", style = MaterialTheme.typography.labelMedium)
             }
@@ -395,6 +446,83 @@ fun ScheduleScreen() {
             termLabel = "${TermUtils.xnmToLabel(selXnm)} 第${selTermNo}学期",
             onDismiss = { showTermSchedule = false },
         )
+    }
+
+    // 导出预览：分享 / 保存到相册
+    val shareExport: (File) -> Unit = { file ->
+        runCatching {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "分享课表图片"))
+        }
+    }
+    val saveExport: (File, Bitmap) -> Unit = { file, bmp ->
+        if (Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/新院助手")
+            }
+            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    bmp.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+                Toast.makeText(context, "已保存到相册（Pictures/新院助手）", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "保存失败", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "当前系统版本请通过「分享」保存", Toast.LENGTH_SHORT).show()
+        }
+    }
+    exportResult?.let { (file, bmp) ->
+        Dialog(
+            onDismissRequest = { exportResult = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.92f)
+                    .background(MaterialTheme.colorScheme.background, RoundedCornerShape(20.dp))
+                    .padding(12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("导出预览", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        " · 分享给同学或存到相册",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { exportResult = null }) { Icon(Icons.Rounded.Close, "关闭") }
+                }
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = "课表图片",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentScale = ContentScale.FillWidth,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { shareExport(file) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("分享") }
+                    OutlinedButton(
+                        onClick = { saveExport(file, bmp) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("保存到相册") }
+                }
+            }
+        }
     }
 }
 
