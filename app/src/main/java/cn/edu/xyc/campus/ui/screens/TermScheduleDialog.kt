@@ -127,12 +127,13 @@ internal fun TermScheduleDialog(
                             }
                         }
                     }
-                    // 同款 7×12 网格（整学期：同一时段的多门课并排）
+                    // 同款 7×12 网格（整学期：同一时段多门课纵向堆叠）
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         Grid(
                             courses = all,
                             timeMain = true,
                             onCourseClick = { selected = it },
+                            stack = true,
                         )
                     }
                 }
