@@ -1,7 +1,7 @@
 package cn.edu.xyc.campus.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,13 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,11 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cn.edu.xyc.campus.data.local.CustomCourseStore
@@ -45,9 +37,7 @@ import cn.edu.xyc.campus.data.model.Course
 import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.JwxtResult
 
-private val TERM_DAY_NAMES = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-
-/** 学期总表：整学期全部课程（教务整表 + 自定义课），按星期/节次排序 */
+/** 学期总表：与周课表同款 7×12 网格展示整学期全部课程（同一时段多门并排，点击看详情） */
 @Composable
 internal fun TermScheduleDialog(
     xnm: String,
@@ -59,6 +49,7 @@ internal fun TermScheduleDialog(
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var courses by remember { mutableStateOf<List<Course>>(emptyList()) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    var selected by remember { mutableStateOf<Course?>(null) }
 
     LaunchedEffect(reloadKey) {
         val key = ScheduleCache.termKey(xnm, xqm)
@@ -82,11 +73,8 @@ internal fun TermScheduleDialog(
         loading = false
     }
 
-    // 教务整表 + 自定义课（不按周过滤），按 星期 → 开始节次 排序
-    val all = remember(courses) {
-        (courses + CustomCourseStore.allAsCourses())
-            .sortedWith(compareBy({ it.dayOfWeek }, { it.startSection }, { it.name }))
-    }
+    // 教务整表 + 自定义课（不按周过滤，同一时段并排）
+    val all = remember(courses) { courses + CustomCourseStore.allAsCourses() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -95,15 +83,15 @@ internal fun TermScheduleDialog(
         Column(
             Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.92f)
+                .fillMaxHeight(0.94f)
                 .background(MaterialTheme.colorScheme.background, RoundedCornerShape(20.dp))
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column {
                     Text("学期课表", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "$termLabel · 共 ${all.size} 门",
+                        "$termLabel · 共 ${all.size} 门 · 点课程看详情",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -111,88 +99,48 @@ internal fun TermScheduleDialog(
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "关闭") }
             }
-            Spacer(Modifier.height(4.dp))
+
             when {
-                loading -> Column(
-                    Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) { CircularProgressIndicator() }
+                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
                 error != null -> ErrorPane(error!!, onRetry = { reloadKey++ })
-                all.isEmpty() -> Column(
-                    Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
+                all.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("该学期暂无课程", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    items(all) { c ->
-                        TermCourseCard(c)
+                else -> {
+                    // 星期表头（与周课表一致）
+                    Row(Modifier.fillMaxWidth()) {
+                        Box(
+                            Modifier.width(28.dp).height(28.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "节",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        listOf("一", "二", "三", "四", "五", "六", "日").forEach {
+                            Box(Modifier.weight(1f).height(28.dp), contentAlignment = Alignment.Center) {
+                                Text(it, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                    // 同款 7×12 网格（整学期：同一时段的多门课并排）
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        Grid(
+                            courses = all,
+                            timeMain = true,
+                            onCourseClick = { selected = it },
+                        )
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun TermCourseCard(c: Course) {
-    val weekday = TERM_DAY_NAMES.getOrElse(c.dayOfWeek - 1) { "周${c.dayOfWeek}" }
-    val idx = (c.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
-    val (bg, fg) = if (c.isCustom) Color(0xFFFFF1C9) to Color(0xFF8A6D05)
-    else COURSE_COLORS[idx]
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = if (c.isCustom) bg else MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // 左侧星期+节次色块
-            Column(
-                Modifier
-                    .background(bg, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(weekday, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = fg)
-                Text(
-                    "${c.startSection}-${c.endSection}节",
-                    fontSize = 10.sp,
-                    color = fg.copy(alpha = 0.85f),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    c.name + if (c.isCustom) "（自定义）" else "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    listOf(c.teacher, c.room).filter { it.isNotEmpty() }.joinToString(" · "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                c.weekText.ifEmpty { "—" },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        selected?.let { c ->
+            CourseDetailDialog(course = c, onDismiss = { selected = null })
         }
     }
 }

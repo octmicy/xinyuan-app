@@ -400,7 +400,7 @@ fun ScheduleScreen() {
 
 /** 课程详情弹窗：点击课表卡片放大查看（教师/教室/时间区间/周次/学分等） */
 @Composable
-private fun CourseDetailDialog(
+internal fun CourseDetailDialog(
     course: Course,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
@@ -488,9 +488,9 @@ private fun DetailRow(label: String, value: String) {
 
 private val DAY_NAMES = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
-/** 一屏式网格：7 列均分屏宽、12 节均分剩余高度，随分辨率自适应 */
+/** 一屏式网格：7 列均分屏宽、12 节均分剩余高度，随分辨率自适应（学期总表复用） */
 @Composable
-private fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Course) -> Unit) {
+internal fun Grid(courses: List<Course>, timeMain: Boolean, onCourseClick: (Course) -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val cellH = maxHeight / 12
         val table = SectionTimes.table(timeMain)
