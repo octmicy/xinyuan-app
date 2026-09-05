@@ -73,7 +73,7 @@ import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.launch
 
-private val COURSE_COLORS = listOf(
+internal val COURSE_COLORS = listOf(
     Color(0xFFD6E4FF) to Color(0xFF1D3F8C),
     Color(0xFFFFE0DB) to Color(0xFF8C2B1D),
     Color(0xFFE0F2E0) to Color(0xFF1D6B2B),
@@ -96,6 +96,7 @@ fun ScheduleScreen() {
     var showTermPicker by rememberSaveable { mutableStateOf(false) }
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
     var showAddCourse by rememberSaveable { mutableStateOf(false) }
+    var showTermSchedule by rememberSaveable { mutableStateOf(false) }
     var timeMain by rememberSaveable { mutableStateOf(true) } // 左列作息表：主教学楼/其他教学楼
     val scope = rememberCoroutineScope()
     val term = TermUtils.of(selXnm, selTermNo)
@@ -146,6 +147,7 @@ fun ScheduleScreen() {
     LaunchedEffect(selXnm, selTermNo, reloadKey) {
         initialLoading = true
         error = null
+        weeks = emptyList()
         val wkKey = ScheduleCache.weeksKey(selXnm, term.xqm)
         val list = ScheduleCache.weeksList[wkKey] ?: when (val w = JwxtApi.getWeeks(selXnm, term.xqm)) {
             is JwxtResult.Ok -> {
@@ -163,6 +165,12 @@ fun ScheduleScreen() {
         }
         if (list != null) {
             weeks = list
+            if (list.isEmpty()) {
+                // 未开课/不存在的学期（如第2、3学期）：不能进入翻页，否则 coerceIn(0,-1) 崩溃
+                error = "该学期暂无课表数据"
+                initialLoading = false
+                return@LaunchedEffect
+            }
             val target = if (selXnm == curTerm.xnm && selTermNo == curTerm.termNo) {
                 guessCurrentWeekFromList(list) ?: 1
             } else 1
@@ -173,7 +181,9 @@ fun ScheduleScreen() {
             // 先解除 loading（让 Pager 组合），再跳到当前周
             // 注意：scrollToPage 会挂起等待 Pager 布局，若 Pager 未组合则永远挂起 → 必须先置 false
             initialLoading = false
-            pagerState.scrollToPage((target - 1).coerceIn(0, weeks.size - 1))
+            if (weeks.isNotEmpty()) {
+                pagerState.scrollToPage((target - 1).coerceIn(0, weeks.size - 1))
+            }
         }
         initialLoading = false
     }
@@ -200,6 +210,9 @@ fun ScheduleScreen() {
                 )
             }
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = { showTermSchedule = true }) {
+                Text("学期课表", style = MaterialTheme.typography.labelMedium)
+            }
             IconButton(onClick = { showAddCourse = true }) {
                 Icon(Icons.Rounded.Add, "添加自定义课程")
             }
@@ -372,6 +385,15 @@ fun ScheduleScreen() {
                 showAddCourse = false
                 Toast.makeText(context, "已添加自定义课程", Toast.LENGTH_SHORT).show()
             },
+        )
+    }
+
+    if (showTermSchedule) {
+        TermScheduleDialog(
+            xnm = selXnm,
+            xqm = term.xqm,
+            termLabel = "${TermUtils.xnmToLabel(selXnm)} 第${selTermNo}学期",
+            onDismiss = { showTermSchedule = false },
         )
     }
 }

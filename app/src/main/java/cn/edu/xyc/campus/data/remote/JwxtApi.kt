@@ -251,6 +251,26 @@ object JwxtApi {
         }
     }
 
+    /**
+     * 学期整表（不带 zs，一次返回整学期全部课程，含 zcd 周次文本）。
+     * 参数只带 xnm/xqm——逆向自学校前端 cxXskbcx.js 的学期课表 tab（paramMap3）。
+     */
+    suspend fun getTermSchedule(xnm: String, xqm: String): JwxtResult<List<Course>> {
+        if (!ensureSession()) return JwxtResult.SessionExpired("教务会话失效，请重新登录")
+        val menu = getMenu("Y253510") ?: return JwxtResult.Failed("未找到课表菜单入口")
+        val pageUrl = openWapMenu(menu).getOrElse { return JwxtResult.Failed("打开课表页失败: ${it.message}") }
+        val body = postForm(
+            JWXT + "/jwglxt/kbcx/xskbcxMobile_cxXsKb.html",
+            mapOf("xnm" to xnm, "xqm" to xqm),
+            pageUrl,
+        ).getOrElse { return JwxtResult.Failed("网络异常: ${it.message}") }
+        return when (val r = parseKbResponse(body)) {
+            is JwxtResult.Ok -> JwxtResult.Ok(r.data.first)
+            is JwxtResult.SessionExpired -> JwxtResult.SessionExpired(r.message)
+            is JwxtResult.Failed -> JwxtResult.Failed(r.message)
+        }
+    }
+
     // ---------------- 成绩 ----------------
 
     /**
