@@ -181,25 +181,6 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         }
                     }
 
-                    Spacer(Modifier.height(24.dp))
-                    OutlinedButton(
-                        onClick = {
-                            PortalApi.clearSession()
-                            JwxtApi.resetSso()
-                            onLogout()
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) { Text("退出登录") }
-
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "学籍数据来自学校教务系统，仅在本机展示",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
                     // ---- 主题外观 ----
                     Spacer(Modifier.height(20.dp))
                     Row(
@@ -348,6 +329,26 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             }
                         }
                     }
+
+                    // ---- 退出登录（页面最底部）----
+                    Spacer(Modifier.height(28.dp))
+                    OutlinedButton(
+                        onClick = {
+                            PortalApi.clearSession()
+                            JwxtApi.resetSso()
+                            onLogout()
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("退出登录") }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "学籍数据来自学校教务系统，仅在本机展示",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     Spacer(Modifier.height(20.dp))
                     Text(
