@@ -104,40 +104,18 @@ fun AppRoot() {
 
     // 更新弹窗：标题带新版本号，正文为发布说明，可 更新/忽略/本次版本不再提醒
     updateInfo?.let { info ->
-        AlertDialog(
-            onDismissRequest = { updateInfo = null },
-            title = { Text("发现新版本 v${info.version}") },
-            text = {
-                Column(
-                    Modifier
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Text(
-                        info.notes.ifEmpty { "更新详情见发布页" },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+        cn.edu.xyc.campus.ui.components.UpdateDialog(
+            version = info.version,
+            notes = info.notes,
+            downloadUrl = info.downloadUrl,
+            onDismiss = { updateInfo = null },
+            onIgnored = {
+                UpdateChecker.setIgnored(context, info.version)
+                updateInfo = null
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)))
-                    }
-                    updateInfo = null
-                }) { Text("更新") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        UpdateChecker.setIgnored(context, info.version)
-                        updateInfo = null
-                    }) { Text("忽略此版本") }
-                    TextButton(onClick = {
-                        UpdateChecker.setNeverRemind(context)
-                        updateInfo = null
-                    }) { Text("不再提醒") }
-                }
+            onNeverRemind = {
+                UpdateChecker.setNeverRemind(context)
+                updateInfo = null
             },
         )
     }
