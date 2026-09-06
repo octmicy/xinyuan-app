@@ -1,7 +1,5 @@
 package cn.edu.xyc.campus.ui.screens
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,23 +44,32 @@ import cn.edu.xyc.campus.data.model.ThirdApp
 import cn.edu.xyc.campus.data.remote.PortalApi
 import cn.edu.xyc.campus.data.remote.SessionStore
 
-/** 应用白名单：名称 → 本地图标资源（按展示顺序） */
-private val ALLOWED = listOf(
-    "教务系统" to R.drawable.app_jwxt,
-    "我的图书馆" to R.drawable.app_library,
-    "就业系统" to R.drawable.app_career,
-    "毕业生离校系统" to R.drawable.app_graduate,
-    "学工系统" to R.drawable.app_xg,
-    "学生缴费" to R.drawable.app_pay,
-    "网络教学系统" to R.drawable.app_online,
+/** 应用白名单：门户名称 → 展示名 / 本地图标 /（可选）SPA 落地路由 */
+private data class AppEntry(
+    val portalName: String,   // 与门户 /app/getApplication 返回的 name 匹配
+    val label: String = portalName,
+    val iconRes: Int,
+    val finalHash: String? = null, // 应用内打开后 SPA 跳转的目标路由
 )
+
+private val ALLOWED = listOf(
+    AppEntry("教务系统", iconRes = R.drawable.app_jwxt),
+    AppEntry("我的图书馆", "图书馆电子证", R.drawable.app_library, finalHash = "/credential?from=Home"),
+    AppEntry("就业系统", iconRes = R.drawable.app_career),
+    AppEntry("毕业生离校系统", iconRes = R.drawable.app_graduate),
+    AppEntry("学工系统", iconRes = R.drawable.app_xg),
+    AppEntry("学生缴费", iconRes = R.drawable.app_pay),
+    AppEntry("网络教学系统", iconRes = R.drawable.app_online),
+)
+
+private data class OpenTarget(val name: String, val url: String, val finalHash: String?)
 
 @Composable
 fun AppsScreen() {
-    val context = LocalContext.current
     var loading by rememberSaveable { mutableStateOf(true) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    var openTarget by remember { mutableStateOf<OpenTarget?>(null) }
 
     LaunchedEffect(reloadKey) {
         ScheduleCache.applications["APPS"]?.let {
@@ -82,12 +89,12 @@ fun AppsScreen() {
     val all = ScheduleCache.applications["APPS"].orEmpty()
     // 白名单过滤 + 同名去重（教务系统两个入口优先 xyoauthlogin）+ 关联本地图标
     val apps = remember(all) {
-        ALLOWED.mapNotNull { (name, iconRes) ->
-            all.filter { it.name == name && it.href.isNotBlank() }.let { candidates ->
+        ALLOWED.mapNotNull { entry ->
+            all.filter { it.name == entry.portalName && it.href.isNotBlank() }.let { candidates ->
                 candidates.firstOrNull { it.href.contains("xyoauthlogin") }
                     ?: candidates.firstOrNull()
-            }?.let { app -> (name to iconRes) to app }
-        }.map { (iconPair, app) -> app to iconPair.second }
+            }?.let { app -> entry to app }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -97,7 +104,7 @@ fun AppsScreen() {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         )
         Text(
-            "点击应用将携带登录票据在浏览器打开",
+            "点击应用在应用内打开",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -117,26 +124,44 @@ fun AppsScreen() {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                items(apps, key = { it.first.name }) { (app, iconRes) ->
-                    AppCell(app = app, iconRes = iconRes, onClick = { openWithTicket(context, app) })
+                items(apps, key = { it.first.portalName }) { (entry, app) ->
+                    AppCell(
+                        app = app,
+                        label = entry.label,
+                        iconRes = entry.iconRes,
+                        onClick = {
+                            openTarget = OpenTarget(entry.label, ticketUrl(app), entry.finalHash)
+                        },
+                    )
                 }
             }
         }
     }
-}
 
-/** 按门户 openThirdPage 语义：hrefType!=5 的应用拼接 ticket 免密打开 */
-private fun openWithTicket(context: android.content.Context, app: ThirdApp) {
-    val sep = if (app.href.contains("?")) "&" else "?"
-    val url = if (app.hrefType == 5) app.href
-    else app.href + sep + "ticket=" + SessionStore.token.orEmpty()
-    runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    openTarget?.let { target ->
+        AppWebViewDialog(
+            name = target.name,
+            url = target.url,
+            finalHash = target.finalHash,
+            onDismiss = { openTarget = null },
+        )
     }
 }
 
+/** 按门户 openThirdPage 语义构造跳转地址：hrefType!=5 的应用拼接 ticket 免密登录 */
+private fun ticketUrl(app: ThirdApp): String {
+    val sep = if (app.href.contains("?")) "&" else "?"
+    return if (app.hrefType == 5) app.href
+    else app.href + sep + "ticket=" + SessionStore.token.orEmpty()
+}
+
 @Composable
-private fun AppCell(app: ThirdApp, iconRes: Int, onClick: () -> Unit) {
+private fun AppCell(
+    app: ThirdApp,
+    label: String,
+    iconRes: Int,
+    onClick: () -> Unit,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -159,13 +184,13 @@ private fun AppCell(app: ThirdApp, iconRes: Int, onClick: () -> Unit) {
         ) {
             Image(
                 painter = androidx.compose.ui.res.painterResource(iconRes),
-                contentDescription = app.name,
+                contentDescription = label,
                 modifier = Modifier.fillMaxSize(),
             )
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            app.name,
+            label,
             fontSize = 12.sp,
             lineHeight = 14.sp,
             maxLines = 2,
