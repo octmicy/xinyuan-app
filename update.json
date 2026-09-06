@@ -1,5 +1,5 @@
 {
-  "version": "0.2.5",
-  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.2.5/xinyuan-v0.2.5.apk",
-  "notes": "新增更新检查与手动检查按钮、课表缓存落盘（杀后台秒开）、主题系统（zip主题包）、学期课表总表、问题反馈入口、课表导出为图片"
+  "version": "0.2.6",
+  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.2.6/xinyuan-v0.2.6.apk",
+  "notes": "更新下载全面走镜像源：检测更新用的哪个镜像，下载就走哪个，国内不再下载失败"
 }
