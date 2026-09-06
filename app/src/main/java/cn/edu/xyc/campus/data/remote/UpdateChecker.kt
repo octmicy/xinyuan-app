@@ -20,19 +20,32 @@ import java.util.concurrent.TimeUnit
  */
 object UpdateChecker {
 
-    data class UpdateInfo(val version: String, val downloadUrl: String, val notes: String)
+    data class UpdateInfo(
+        val version: String,
+        val downloadUrl: String,   // 原始 GitHub 直链
+        val notes: String,
+        val proxyPrefix: String?,  // 检测更新时验证可用的镜像前缀，下载复用同一镜像
+    )
 
     private const val LATEST_PATH = "repos/octmicy/xinyuan-app/releases/latest"
 
-    // API 镜像池（镜像优先，直连殿后）
-    private val apiEndpoints = listOf(
-        "https://ghfast.top/https://api.github.com/$LATEST_PATH",
-        "https://gh-proxy.com/https://api.github.com/$LATEST_PATH",
-        "https://ghproxy.net/https://api.github.com/$LATEST_PATH",
-        "https://gh.llkk.cc/https://api.github.com/$LATEST_PATH",
-        "https://github.moeyy.xyz/https://api.github.com/$LATEST_PATH",
-        "https://api.github.com/$LATEST_PATH",
+    // 社区加速节点（前缀 + GitHub 原地址即可加速，API/下载文件通用）
+    private val proxyHosts = listOf(
+        "https://ghfast.top/",
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://gh.llkk.cc/",
+        "https://github.moeyy.xyz/",
     )
+
+    // API 镜像池（镜像优先，直连殿后）
+    private val apiEndpoints: List<String> =
+        proxyHosts.map { it + "https://api.github.com/$LATEST_PATH" } +
+            "https://api.github.com/$LATEST_PATH"
+
+    /** 更新包下载源列表：镜像优先，官方直连殿后（供浏览器下载选择） */
+    fun downloadMirrors(base: String): List<String> =
+        proxyHosts.map { it + base } + base
 
     // 静态 CDN 兜底（仓库根 update.json，与 api 结构字段一致：version/url/notes）
     private val staticEndpoints = listOf(
@@ -54,6 +67,7 @@ object UpdateChecker {
     }
 
     private fun fetchApi(ep: String): UpdateInfo? = runCatching {
+        val prefix = proxyHosts.firstOrNull { ep.startsWith(it) }
         val req = Request.Builder().url(ep).header("Accept", "application/vnd.github+json").build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return@use null
@@ -71,7 +85,7 @@ object UpdateChecker {
                     }
                 }
             }
-            UpdateInfo(version, url, obj.optString("body"))
+            UpdateInfo(version, url, obj.optString("body"), prefix)
         }
     }.getOrNull()
 
@@ -82,6 +96,7 @@ object UpdateChecker {
             val obj = JSONObject(resp.body?.string().orEmpty())
             val version = obj.optString("version")
             if (version.isEmpty()) return@use null
+            // 静态 CDN 走通说明用户可达该 CDN，但下载仍需镜像代理 GitHub，取首个镜像为最优猜测
             UpdateInfo(
                 version = version,
                 downloadUrl = obj.optString(
@@ -89,6 +104,7 @@ object UpdateChecker {
                     "https://github.com/octmicy/xinyuan-app/releases/latest",
                 ),
                 notes = obj.optString("notes"),
+                proxyPrefix = proxyHosts.firstOrNull(),
             )
         }
     }.getOrNull()
