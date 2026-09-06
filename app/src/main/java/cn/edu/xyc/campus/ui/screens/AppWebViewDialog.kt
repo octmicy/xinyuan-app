@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -19,11 +21,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.OpenInBrowser
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -40,8 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,9 +52,10 @@ import androidx.compose.ui.window.DialogProperties
 import cn.edu.xyc.campus.data.remote.CampusHttp
 
 /**
- * 应用内打开第三方系统：走门户跳转登录链（Cookie 由 CampusHttp 同步），
- * 可选 finalHash：SPA 站点落地后自动跳到目标路由（如图书馆电子证 /credential?from=Home）。
- * 顶栏跟随 App 主题色，带域名副标题与更多菜单（浏览器打开）。
+ * 应用内打开第三方系统：走门户跳转登录链（Cookie 由 CampusHttp 同步）。
+ * finalHash：SPA 登录落地后自动跳目标路由（如图书馆电子证）。
+ * 注入带重试——SPA 初始化完成前设置 hash 会被路由重置，故延迟+校验多次。
+ * 外壳与 App 品牌统一：渐变顶栏、品牌加载态（网页本体无法主题化）。
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -65,12 +67,11 @@ internal fun AppWebViewDialog(
 ) {
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
-    var injected by remember { mutableStateOf(false) }
     var currentHost by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
 
-    // 顶栏用主题色容器，白字；WebView 背景对齐 App 底色避免闪白
-    val barColor = MaterialTheme.colorScheme.primary
+    val primary = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
     val pageBg = MaterialTheme.colorScheme.background
 
     val webView = remember {
@@ -79,6 +80,24 @@ internal fun AppWebViewDialog(
             settings.domStorageEnabled = true
             settings.userAgentString = CampusHttp.MOBILE_UA
             setBackgroundColor(AndroidColor.TRANSPARENT)
+        }
+    }
+    val handler = remember { Handler(Looper.getMainLooper()) }
+
+    // finalHash 注入：落地目标域后设置路由并校验，SPA 未就绪被重置则延迟重试（最多 5 次）
+    var injectedDone by remember { mutableStateOf(false) }
+    var injectAttempts by remember { mutableIntStateOf(0) }
+    fun tryInject(): Unit {
+        if (injectedDone) return
+        webView.evaluateJavascript(
+            "window.location.hash = '${finalHash?.removePrefix("#") ?: ""}';",
+            null,
+        )
+        injectAttempts++
+        if (injectAttempts >= 5) {
+            injectedDone = true
+        } else {
+            handler.postDelayed({ tryInject() }, 900)
         }
     }
 
@@ -94,13 +113,9 @@ internal fun AppWebViewDialog(
 
         override fun onPageFinished(view: WebView, url: String?) {
             url ?: return
-            // SPA 站点登录落地后跳到目标路由（只注入一次）
-            if (finalHash != null && !injected && url.contains("mfindxyc.libsp.cn")) {
-                injected = true
-                view.evaluateJavascript(
-                    "window.location.hash = '${finalHash.removePrefix("#")}';",
-                    null,
-                )
+            // 登录链落地到图书馆域（任何路径）后开始注入目标路由
+            if (finalHash != null && !injectedDone && url.contains("mfindxyc.libsp.cn")) {
+                handler.postDelayed({ tryInject() }, 1200)
             }
         }
     }
@@ -119,8 +134,12 @@ internal fun AppWebViewDialog(
                 .fillMaxSize()
                 .background(pageBg),
         ) {
-            // 主题色顶栏
-            Column(Modifier.background(barColor)) {
+            // 品牌渐变顶栏（与登录页同风格）
+            Column(
+                Modifier.background(
+                    Brush.verticalGradient(listOf(primary, primaryContainer)),
+                ),
+            ) {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -182,7 +201,6 @@ internal fun AppWebViewDialog(
                         }
                     }
                 }
-                // 主题色进度条（贴顶栏下沿，完成后隐藏）
                 if (progress < 100) {
                     LinearProgressIndicator(
                         progress = { progress / 100f },
@@ -192,17 +210,31 @@ internal fun AppWebViewDialog(
                     )
                 }
             }
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 6.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)),
-            ) {
+
+            Box(Modifier.fillMaxSize()) {
                 AndroidView(
                     factory = { webView },
                     modifier = Modifier.fillMaxSize(),
-                    onReset = { it.setBackgroundColor(AndroidColor.TRANSPARENT) },
                 )
+                // 品牌加载态：首屏较慢时展示（进度过半后淡出交给网页自身）
+                if (progress < 25) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(pageBg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            cn.edu.xyc.campus.ui.components.ThemeImage(
+                                key = "login_logo",
+                                resId = cn.edu.xyc.campus.R.drawable.ic_launcher_foreground,
+                                modifier = Modifier.size(88.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            CircularProgressIndicator(Modifier.size(24.dp))
+                        }
+                    }
+                }
             }
             Spacer(Modifier.navigationBarsPadding())
         }
