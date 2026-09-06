@@ -403,6 +403,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
             version = info.version,
             notes = info.notes,
             downloadUrl = info.downloadUrl,
+            proxyPrefix = info.proxyPrefix,
             onDismiss = { manualUpdate = null },
         )
     }

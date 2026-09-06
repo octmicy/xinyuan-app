@@ -1,7 +1,10 @@
 package cn.edu.xyc.campus.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -13,14 +16,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.unit.dp
 import cn.edu.xyc.campus.data.remote.UpdateChecker
 
 /**
  * 发现新版本弹窗：标题带版本号，正文为发布说明。
+ * 点「更新」直接用检测更新时验证可用的镜像源下载（检测通了下载就通），官方直连仅作兜底说明。
  * onIgnored / onNeverRemind 传 null 时隐藏对应按钮（手动检查不需要）。
  */
 @Composable
@@ -31,8 +32,10 @@ fun UpdateDialog(
     onDismiss: () -> Unit,
     onIgnored: (() -> Unit)? = null,
     onNeverRemind: (() -> Unit)? = null,
+    proxyPrefix: String? = null,
 ) {
     val context = LocalContext.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("发现新版本 v$version") },
@@ -46,13 +49,19 @@ fun UpdateDialog(
                     notes.ifEmpty { "更新详情见发布页" },
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Spacer(Modifier.padding(top = 6.dp))
+                Text(
+                    "将通过${if (proxyPrefix != null) "镜像源" else "官方直连"}下载安装包",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                runCatching {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)))
-                }
+                // 复用检测更新时验证可用的镜像前缀，保证下载链路与检测一致
+                val finalUrl = (proxyPrefix ?: "") + downloadUrl
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(finalUrl))) }
                 onDismiss()
             }) { Text("更新") }
         },

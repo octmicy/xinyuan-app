@@ -108,6 +108,7 @@ fun AppRoot() {
             version = info.version,
             notes = info.notes,
             downloadUrl = info.downloadUrl,
+            proxyPrefix = info.proxyPrefix,
             onDismiss = { updateInfo = null },
             onIgnored = {
                 UpdateChecker.setIgnored(context, info.version)
