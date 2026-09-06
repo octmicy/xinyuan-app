@@ -39,6 +39,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import cn.edu.xyc.campus.MainActivity
 import cn.edu.xyc.campus.data.local.CustomCourseStore
+import cn.edu.xyc.campus.data.local.ThemeStore
 import cn.edu.xyc.campus.data.local.TodayStore
 import cn.edu.xyc.campus.data.model.Course
 import cn.edu.xyc.campus.data.model.SectionTimes
@@ -92,6 +93,7 @@ class TodayWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        ThemeStore.init(context) // 主题包配色
         val offset = readOffset(context, offsetKey(context, id))
 
         val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
@@ -136,6 +138,7 @@ class TodayWidget : GlanceAppWidget() {
         courses: List<Course>,
         offset: Int,
     ) {
+        val wc = wColors(LocalContext.current)
         val size = LocalSize.current
         // 尺寸分档：紧凑（高<170dp）/ 常规 / 大（宽≥250dp 且高≥240dp 显示教师）
         val compact = size.height < 170.dp
@@ -149,7 +152,7 @@ class TodayWidget : GlanceAppWidget() {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(ColorProvider(Bg))
+                .background(ColorProvider(wc.bg))
                 .cornerRadius(16.dp)
                 .clickable(
                     actionStartActivity(
@@ -164,7 +167,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         if (offset == 0) "今日课程" else "课程预览",
                         style = TextStyle(
-                            color = ColorProvider(Primary),
+                            color = ColorProvider(wc.primary),
                             fontSize = if (compact) 11.sp else 13.sp,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -174,7 +177,7 @@ class TodayWidget : GlanceAppWidget() {
                     if (relTag.isNotEmpty()) {
                         Text(
                             relTag,
-                            style = TextStyle(color = ColorProvider(Secondary), fontSize = 10.sp),
+                            style = TextStyle(color = ColorProvider(wc.secondary), fontSize = 10.sp),
                             maxLines = 1,
                         )
                     }
@@ -187,7 +190,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         "‹",
                         style = TextStyle(
-                            color = ColorProvider(Primary),
+                            color = ColorProvider(wc.primary),
                             fontSize = arrowSize,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -198,7 +201,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         dateShort,
                         style = TextStyle(
-                            color = ColorProvider(Primary),
+                            color = ColorProvider(wc.primary),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = androidx.glance.text.TextAlign.Center,
@@ -213,7 +216,7 @@ class TodayWidget : GlanceAppWidget() {
                         Text(
                             "今",
                             style = TextStyle(
-                                color = ColorProvider(Primary),
+                                color = ColorProvider(wc.primary),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                             ),
@@ -228,7 +231,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         "›",
                         style = TextStyle(
-                            color = ColorProvider(Primary),
+                            color = ColorProvider(wc.primary),
                             fontSize = arrowSize,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -240,21 +243,21 @@ class TodayWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.height(if (compact) 3.dp else 5.dp))
                 when {
                     snap == null || snap.weeks.isEmpty() ->
-                        Empty("打开 App 同步课表", compact)
+                        Empty("打开 App 同步课表", compact, wc)
                     noCurrentWeek ->
-                        Empty("该日不在已同步的教学周内", compact)
+                        Empty("该日不在已同步的教学周内", compact, wc)
                     courses.isEmpty() ->
-                        Empty(if (offset == 0) "今天没有课，好好休息 🎉" else "该日没有课 🎉", compact)
+                        Empty(if (offset == 0) "今天没有课，好好休息 🎉" else "该日没有课 🎉", compact, wc)
                     else -> {
                         courses.take(maxCourses).forEach { c ->
-                            CourseRow(c, compact, large)
+                            CourseRow(c, compact, large, wc)
                         }
                         if (courses.size > maxCourses) {
                             Spacer(GlanceModifier.height(4.dp))
                             Text(
                                 "还有 ${courses.size - maxCourses} 门课…",
                                 style = TextStyle(
-                                    color = ColorProvider(Secondary),
+                                    color = ColorProvider(wc.secondary),
                                     fontSize = 9.sp,
                                 ),
                                 maxLines = 1,
@@ -267,11 +270,11 @@ class TodayWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun Empty(text: String, compact: Boolean) {
+    private fun Empty(text: String, compact: Boolean, wc: WColors) {
         Text(
             text,
             style = TextStyle(
-                color = ColorProvider(Secondary),
+                color = ColorProvider(wc.secondary),
                 fontSize = if (compact) 10.sp else 11.sp,
             ),
             maxLines = 2,
@@ -279,12 +282,12 @@ class TodayWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun CourseRow(c: Course, compact: Boolean, large: Boolean) {
+    private fun CourseRow(c: Course, compact: Boolean, large: Boolean, wc: WColors) {
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .padding(bottom = if (compact) 3.dp else 4.dp)
-                .background(ColorProvider(Card))
+                .background(ColorProvider(wc.card))
                 .cornerRadius(8.dp)
                 .padding(
                     horizontal = if (compact) 6.dp else 8.dp,
@@ -301,7 +304,7 @@ class TodayWidget : GlanceAppWidget() {
             }
             Text(
                 label.trim(),
-                style = TextStyle(color = ColorProvider(Primary), fontSize = 10.sp),
+                style = TextStyle(color = ColorProvider(wc.primary), fontSize = 10.sp),
                 maxLines = 1,
             )
             Spacer(GlanceModifier.width(7.dp))
@@ -309,7 +312,7 @@ class TodayWidget : GlanceAppWidget() {
                 Text(
                     c.name,
                     style = TextStyle(
-                        color = ColorProvider(if (c.isCustom) CustomAmber else TextDark),
+                        color = ColorProvider(if (c.isCustom) wc.custom else wc.textDark),
                         fontSize = if (compact) 10.sp else 11.sp,
                         fontWeight = FontWeight.Medium,
                     ),
@@ -318,13 +321,13 @@ class TodayWidget : GlanceAppWidget() {
                 if (large && c.teacher.isNotEmpty()) {
                     Text(
                         "${c.teacher} · ${c.room}",
-                        style = TextStyle(color = ColorProvider(Secondary), fontSize = 9.sp),
+                        style = TextStyle(color = ColorProvider(wc.secondary), fontSize = 9.sp),
                         maxLines = 1,
                     )
                 } else if ((!compact || c.isCustom) && c.room.isNotEmpty()) {
                     Text(
                         "@${c.room}",
-                        style = TextStyle(color = ColorProvider(Secondary), fontSize = 9.sp),
+                        style = TextStyle(color = ColorProvider(wc.secondary), fontSize = 9.sp),
                         maxLines = 1,
                     )
                 }
@@ -333,18 +336,33 @@ class TodayWidget : GlanceAppWidget() {
     }
 
     companion object {
-        // 新院助手校色：浅蓝底 + 深蓝字
-        private val Bg = Color(0xFFE8F1FF)
-        private val Card = Color(0xFFFFFFFF)
-        private val Primary = Color(0xFF1D3F8C)
-        private val Secondary = Color(0xFF6B7B99)
-        private val TextDark = Color(0xFF22304D)
-        private val CustomAmber = Color(0xFF8A6D05) // 自定义课程标识色
-
         // Calendar.DAY_OF_WEEK: 1=周日 … 7=周六
         private val WEEKDAYS = arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
+
+        /** 主题包可覆盖的小组件配色（keys: widgetBg/widgetCard/widgetText/widgetPrimary/widgetSecondary/widgetCustom） */
+        private fun wColors(context: Context): WColors {
+            fun c(key: String, fallback: String) =
+                Color(android.graphics.Color.parseColor(ThemeStore.color(key, fallback)))
+            return WColors(
+                bg = c("widgetBg", "#E8F1FF"),
+                card = c("widgetCard", "#FFFFFF"),
+                primary = c("widgetPrimary", "#1D3F8C"),
+                secondary = c("widgetSecondary", "#6B7B99"),
+                textDark = c("widgetText", "#22304D"),
+                custom = c("widgetCustom", "#8A6D05"),
+            )
+        }
     }
 }
+
+private data class WColors(
+    val bg: Color,
+    val card: Color,
+    val primary: Color,
+    val secondary: Color,
+    val textDark: Color,
+    val custom: Color,
+)
 
 /** 2×2 */
 class TodayWidgetReceiver : GlanceAppWidgetReceiver() {

@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -77,6 +78,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var profile by remember { mutableStateOf<ProfileCard?>(null) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var showDonate by rememberSaveable { mutableStateOf(false) }
+    var showTheme by rememberSaveable { mutableStateOf(false) }
     var avatarVersion by rememberSaveable { mutableStateOf(0) }
 
     // 系统相册选图（Photo Picker，旧系统自动回退到系统文件选择器）
@@ -191,8 +193,28 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
+                    // ---- 主题外观 ----
+                    Spacer(Modifier.height(20.dp))
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showTheme = true }
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("主题外观", style = MaterialTheme.typography.bodyMedium)
+                    }
+
                     // ---- 项目地址 + 赞助 ----
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(8.dp))
                     Card(
                         Modifier.fillMaxSize(),
                         shape = RoundedCornerShape(16.dp),
@@ -316,6 +338,10 @@ fun ProfileScreen(onLogout: () -> Unit) {
         }
     }
 
+    if (showTheme) {
+        ThemeScreenDialog(onDismiss = { showTheme = false })
+    }
+
     if (showDonate) {
         DonateDialog(onDismiss = { showDonate = false })
     }
@@ -396,9 +422,9 @@ private fun Avatar(size: androidx.compose.ui.unit.Dp, version: Int, onClick: () 
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Image(
-                painter = painterResource(R.drawable.avatar_default),
-                contentDescription = "头像",
+            cn.edu.xyc.campus.ui.components.ThemeImage(
+                key = "avatar_default",
+                resId = R.drawable.avatar_default,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )

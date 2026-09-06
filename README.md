@@ -53,3 +53,59 @@ keyPassword=你的密码
 ## 赞助
 
 如果这个项目对你有帮助，欢迎在 App「我的」页点击 **赞助开发者** 请作者喝杯奶茶 🧋，或到 GitHub 给个 [Star](https://github.com/octmicy/xinyuan-app)！
+
+## 主题格式
+
+App 支持导入 zip 主题包（「我的」→「主题外观」→「导入主题包」），可替换全局配色、底部导航图标、登录页形象、默认头像。
+
+zip 包结构：
+
+```
+我的主题.zip
+├── theme.json          # 必需，主题描述
+├── nav_schedule.png    # 图标文件（可选，png/jpg/webp）
+├── nav_grades.png
+├── ...
+└── login_logo.png
+```
+
+`theme.json` 示例（version 必须为 1；colors/icons 都可以只写要覆盖的项）：
+
+```json
+{
+  "name": "我的主题",
+  "author": "你的名字",
+  "version": 1,
+  "colors": {
+    "primary": "#1E5AA8",
+    "onPrimary": "#FFFFFF",
+    "primaryContainer": "#D6E3FF",
+    "onPrimaryContainer": "#0F3866",
+    "secondaryContainer": "#D6E3FF",
+    "onSecondaryContainer": "#0F3866",
+    "background": "#FFFFFF",
+    "widgetBg": "#E8F1FF",
+    "widgetCard": "#FFFFFF",
+    "widgetText": "#22304D",
+    "widgetPrimary": "#1D3F8C",
+    "widgetSecondary": "#6B7B99",
+    "widgetCustom": "#8A6D05"
+  },
+  "icons": {
+    "nav_schedule": "nav_schedule.png",
+    "nav_grades": "nav_grades.png",
+    "nav_apps": "nav_apps.png",
+    "nav_leave": "nav_leave.png",
+    "nav_profile": "nav_profile.png",
+    "login_logo": "login_logo.png",
+    "avatar_default": "avatar_default.png"
+  }
+}
+```
+
+说明：
+
+- `colors.primary` 等作用于全局界面（按钮、选中态、上下栏强调色）；`widget*` 系列作用于课程小组件
+- `icons` 的 key 固定为：`nav_schedule` / `nav_grades` / `nav_apps` / `nav_leave` / `nav_profile`（底部导航）、`login_logo`（登录页与引导页主视觉）、`avatar_default`（默认头像）
+- 单文件不超过 6MB，建议图标用 256×256 png
+- 「恢复默认主题」随时可回退

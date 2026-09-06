@@ -18,7 +18,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import cn.edu.xyc.campus.R
 import cn.edu.xyc.campus.data.local.ScheduleCache
@@ -26,15 +25,16 @@ import cn.edu.xyc.campus.data.model.ProfileCard
 import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.JwxtResult
 import cn.edu.xyc.campus.data.remote.TermUtils
+import cn.edu.xyc.campus.ui.components.ThemeImage
 
-private data class Tab(val iconRes: Int, val label: String)
+private data class Tab(val key: String, val iconRes: Int, val label: String)
 
 private val TABS = listOf(
-    Tab(R.drawable.nav_schedule, "课表"),
-    Tab(R.drawable.nav_grades, "成绩"),
-    Tab(R.drawable.nav_apps, "应用"),
-    Tab(R.drawable.nav_leave, "请假"),
-    Tab(R.drawable.nav_profile, "我的"),
+    Tab("nav_schedule", R.drawable.nav_schedule, "课表"),
+    Tab("nav_grades", R.drawable.nav_grades, "成绩"),
+    Tab("nav_apps", R.drawable.nav_apps, "应用"),
+    Tab("nav_leave", R.drawable.nav_leave, "请假"),
+    Tab("nav_profile", R.drawable.nav_profile, "我的"),
 )
 
 @Composable
@@ -83,8 +83,9 @@ fun MainTabs(onLogout: () -> Unit) {
                         selected = selected == index,
                         onClick = { selected = index },
                         icon = {
-                            Image(
-                                painter = painterResource(tab.iconRes),
+                            ThemeImage(
+                                key = tab.key,
+                                resId = tab.iconRes,
                                 contentDescription = tab.label,
                                 modifier = Modifier
                                     .size(30.dp)
