@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,6 +81,11 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var showDonate by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
     var avatarVersion by rememberSaveable { mutableStateOf(0) }
+    val versionName = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: ""
+    }
 
     // 系统相册选图（Photo Picker，旧系统自动回退到系统文件选择器）
     val pickAvatar = rememberLauncherForActivityResult(
@@ -333,6 +339,15 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             }
                         }
                     }
+
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "新院助手 v$versionName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
