@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,6 +87,23 @@ fun ProfileScreen(onLogout: () -> Unit) {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: ""
+    }
+    var checkingUpdate by rememberSaveable { mutableStateOf(false) }
+    var manualUpdate by remember { mutableStateOf<cn.edu.xyc.campus.data.remote.UpdateChecker.UpdateInfo?>(null) }
+    val checkUpdate: () -> Unit = {
+        if (!checkingUpdate) {
+            checkingUpdate = true
+            scope.launch {
+                val info = cn.edu.xyc.campus.data.remote.UpdateChecker.checkLatest()
+                checkingUpdate = false
+                when {
+                    info == null -> Toast.makeText(context, "检查失败，请稍后再试", Toast.LENGTH_SHORT).show()
+                    !cn.edu.xyc.campus.data.remote.UpdateChecker.isNewer(info.version, versionName) ->
+                        Toast.makeText(context, "已是最新版本 v$versionName", Toast.LENGTH_SHORT).show()
+                    else -> manualUpdate = info
+                }
+            }
+        }
     }
 
     // 系统相册选图（Photo Picker，旧系统自动回退到系统文件选择器）
@@ -330,18 +348,31 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         }
                     }
 
-                    // ---- 退出登录（页面最底部）----
+                    // ---- 退出登录 / 检查更新（页面最底部）----
                     Spacer(Modifier.height(28.dp))
-                    OutlinedButton(
-                        onClick = {
-                            PortalApi.clearSession()
-                            JwxtApi.resetSso()
-                            onLogout()
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) { Text("退出登录") }
+                    Row {
+                        OutlinedButton(
+                            onClick = {
+                                PortalApi.clearSession()
+                                JwxtApi.resetSso()
+                                onLogout()
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) { Text("退出登录") }
+                        Spacer(Modifier.width(12.dp))
+                        OutlinedButton(onClick = checkUpdate, enabled = !checkingUpdate) {
+                            if (checkingUpdate) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(if (checkingUpdate) "检查中…" else "检查更新")
+                        }
+                    }
 
                     Spacer(Modifier.height(16.dp))
                     Text(
@@ -365,6 +396,15 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
     if (showTheme) {
         ThemeScreenDialog(onDismiss = { showTheme = false })
+    }
+
+    manualUpdate?.let { info ->
+        cn.edu.xyc.campus.ui.components.UpdateDialog(
+            version = info.version,
+            notes = info.notes,
+            downloadUrl = info.downloadUrl,
+            onDismiss = { manualUpdate = null },
+        )
     }
 
     if (showDonate) {
