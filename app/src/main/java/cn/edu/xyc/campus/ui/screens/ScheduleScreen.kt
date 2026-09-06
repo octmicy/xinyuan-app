@@ -148,10 +148,10 @@ fun ScheduleScreen() {
         }
     }
 
-    // 确保某周数据就绪（未缓存才请求）
-    suspend fun ensureWeek(zs: Int) {
+    // 确保某周数据就绪（未缓存才请求）；force=true 时无视缓存强制拉取（手动刷新用）
+    suspend fun ensureWeek(zs: Int, force: Boolean = false) {
         val key = ScheduleCache.weekKey(selXnm, term.xqm, zs)
-        if (ScheduleCache.weekData.containsKey(key)) return
+        if (!force && ScheduleCache.weekData.containsKey(key)) return
         if (!ScheduleCache.tryMark(key)) return
         try {
             when (val r = JwxtApi.getScheduleByWeek(term, zs)) {
@@ -159,11 +159,38 @@ fun ScheduleScreen() {
                     ScheduleCache.weekData[key] = r.data
                     syncTodayStore(zs, r.data.first)
                 }
-                is JwxtResult.SessionExpired -> error = r.message
-                is JwxtResult.Failed -> error = r.message
+                is JwxtResult.SessionExpired -> if (force) error = r.message
+                is JwxtResult.Failed -> if (force) error = r.message
             }
         } finally {
             ScheduleCache.unmark(key)
+        }
+    }
+
+    /**
+     * 缓存秒开后的后台静默比对：周次列表与当前周课表与网络不一致时才更新。
+     * 自定义课是本地数据、渲染时才合并，天然不参与比对。
+     */
+    fun revalidate(xnm: String, tm: TermUtils.Term, zs: Int) {
+        scope.launch {
+            val wkKey = ScheduleCache.weeksKey(xnm, tm.xqm)
+            val cachedWeeks = ScheduleCache.weeksList[wkKey] ?: return@launch
+            when (val w = JwxtApi.getWeeks(xnm, tm.xqm)) {
+                is JwxtResult.Ok -> if (w.data != cachedWeeks) {
+                    ScheduleCache.weeksList[wkKey] = w.data
+                    weeks = w.data
+                }
+                else -> Unit
+            }
+            val key = ScheduleCache.weekKey(xnm, tm.xqm, zs)
+            val cachedData = ScheduleCache.weekData[key] ?: return@launch
+            when (val r = JwxtApi.getScheduleByWeek(tm, zs)) {
+                is JwxtResult.Ok -> if (r.data != cachedData) {
+                    ScheduleCache.weekData[key] = r.data
+                    syncTodayStore(zs, r.data.first)
+                }
+                else -> Unit
+            }
         }
     }
 
@@ -173,7 +200,9 @@ fun ScheduleScreen() {
         error = null
         weeks = emptyList()
         val wkKey = ScheduleCache.weeksKey(selXnm, term.xqm)
-        val list = ScheduleCache.weeksList[wkKey] ?: when (val w = JwxtApi.getWeeks(selXnm, term.xqm)) {
+        val force = reloadKey > 0 // 手动刷新：无视缓存强制拉取
+        val cachedList = ScheduleCache.weeksList[wkKey]
+        val list = (if (force) null else cachedList) ?: when (val w = JwxtApi.getWeeks(selXnm, term.xqm)) {
             is JwxtResult.Ok -> {
                 ScheduleCache.weeksList[wkKey] = w.data
                 w.data
@@ -198,15 +227,21 @@ fun ScheduleScreen() {
             val target = if (selXnm == curTerm.xnm && selTermNo == curTerm.termNo) {
                 guessCurrentWeekFromList(list) ?: 1
             } else 1
-            ensureWeek(target)
-            // 预加载相邻周：翻页大概率命中缓存，无需转圈
-            if (target + 1 <= list.size) ensureWeek(target + 1)
-            if (target - 1 >= 1) ensureWeek(target - 1)
+            if (force || cachedList == null) {
+                // 无缓存（或手动刷新）：阻塞拉取当前周
+                ensureWeek(target, force = force)
+                if (target + 1 <= list.size) ensureWeek(target + 1)
+                if (target - 1 >= 1) ensureWeek(target - 1)
+            }
             // 先解除 loading（让 Pager 组合），再跳到当前周
             // 注意：scrollToPage 会挂起等待 Pager 布局，若 Pager 未组合则永远挂起 → 必须先置 false
             initialLoading = false
             if (weeks.isNotEmpty()) {
                 pagerState.scrollToPage((target - 1).coerceIn(0, weeks.size - 1))
+            }
+            // 缓存秒开：后台与教务实际内容比对，有变化才更新
+            if (!force && cachedList != null) {
+                revalidate(selXnm, term, target)
             }
         }
         initialLoading = false

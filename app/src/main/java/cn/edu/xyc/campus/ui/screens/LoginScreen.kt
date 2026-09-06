@@ -119,10 +119,10 @@ fun LoginScreen(
         ) {
             Spacer(Modifier.height(48.dp))
 
-            // IP 主视觉（与桌面图标同款贴纸）
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = null,
+            // IP 主视觉（与桌面图标同款贴纸，可被主题包 login_logo 覆盖）
+            cn.edu.xyc.campus.ui.components.ThemeImage(
+                key = "login_logo",
+                resId = R.drawable.ic_launcher_foreground,
                 modifier = Modifier.size(132.dp),
             )
             Spacer(Modifier.height(10.dp))

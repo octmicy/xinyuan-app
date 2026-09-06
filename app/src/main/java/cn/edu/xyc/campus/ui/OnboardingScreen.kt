@@ -89,9 +89,9 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = null,
+                    cn.edu.xyc.campus.ui.components.ThemeImage(
+                        key = "login_logo",
+                        resId = R.drawable.ic_launcher_foreground,
                         modifier = Modifier.size(150.dp),
                     )
                     Spacer(Modifier.height(18.dp))

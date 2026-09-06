@@ -1,15 +1,24 @@
 package cn.edu.xyc.campus.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,10 +44,12 @@ import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.LoginResult
 import cn.edu.xyc.campus.data.remote.PortalApi
 import cn.edu.xyc.campus.data.remote.SessionStore
+import cn.edu.xyc.campus.data.remote.UpdateChecker
 import cn.edu.xyc.campus.ui.screens.LoginScreen
 import cn.edu.xyc.campus.ui.screens.MainTabs
 import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -48,7 +59,24 @@ fun AppRoot() {
     var loggedIn by rememberSaveable { mutableStateOf(false) }
     var autoChecking by rememberSaveable { mutableStateOf(CredStore.load() != null) }
     var introDone by rememberSaveable { mutableStateOf(IntroStore.isDone(context)) }
+    var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var prefill by remember { mutableStateOf<StoredCredential?>(null) }
+
+    // 进入主界面后静默检查更新（直连+镜像自动回退；忽略/不再提醒的不弹）
+    LaunchedEffect(loggedIn) {
+        if (!loggedIn) return@LaunchedEffect
+        delay(2500)
+        val info = UpdateChecker.checkLatest() ?: return@LaunchedEffect
+        val current = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: return@LaunchedEffect
+        if (UpdateChecker.isNewer(info.version, current) &&
+            !UpdateChecker.isIgnored(context, info.version) &&
+            !UpdateChecker.isNeverRemind(context)
+        ) {
+            updateInfo = info
+        }
+    }
 
     // 冷启动静默重登：解决"清理后台后要重新输入账号密码"
     LaunchedEffect(autoChecking) {
@@ -72,6 +100,46 @@ fun AppRoot() {
             }
         }
         autoChecking = false
+    }
+
+    // 更新弹窗：标题带新版本号，正文为发布说明，可 更新/忽略/本次版本不再提醒
+    updateInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("发现新版本 v${info.version}") },
+            text = {
+                Column(
+                    Modifier
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        info.notes.ifEmpty { "更新详情见发布页" },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)))
+                    }
+                    updateInfo = null
+                }) { Text("更新") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        UpdateChecker.setIgnored(context, info.version)
+                        updateInfo = null
+                    }) { Text("忽略此版本") }
+                    TextButton(onClick = {
+                        UpdateChecker.setNeverRemind(context)
+                        updateInfo = null
+                    }) { Text("不再提醒") }
+                }
+            },
+        )
     }
 
     when {
