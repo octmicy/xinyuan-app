@@ -63,7 +63,7 @@ internal fun TermScheduleDialog(
         error = null
         when (val r = JwxtApi.getTermSchedule(xnm, xqm)) {
             is JwxtResult.Ok -> {
-                ScheduleCache.termSchedule[key] = r.data
+                ScheduleCache.putTermSchedule(key, r.data)
                 courses = r.data
             }
             is JwxtResult.SessionExpired -> error = r.message

@@ -156,7 +156,7 @@ fun ScheduleScreen() {
         try {
             when (val r = JwxtApi.getScheduleByWeek(term, zs)) {
                 is JwxtResult.Ok -> {
-                    ScheduleCache.weekData[key] = r.data
+                    ScheduleCache.putWeekData(key, r.data)
                     syncTodayStore(zs, r.data.first)
                 }
                 is JwxtResult.SessionExpired -> if (force) error = r.message
@@ -177,7 +177,7 @@ fun ScheduleScreen() {
             val cachedWeeks = ScheduleCache.weeksList[wkKey] ?: return@launch
             when (val w = JwxtApi.getWeeks(xnm, tm.xqm)) {
                 is JwxtResult.Ok -> if (w.data != cachedWeeks) {
-                    ScheduleCache.weeksList[wkKey] = w.data
+                    ScheduleCache.putWeeks(wkKey, w.data)
                     weeks = w.data
                 }
                 else -> Unit
@@ -186,7 +186,7 @@ fun ScheduleScreen() {
             val cachedData = ScheduleCache.weekData[key] ?: return@launch
             when (val r = JwxtApi.getScheduleByWeek(tm, zs)) {
                 is JwxtResult.Ok -> if (r.data != cachedData) {
-                    ScheduleCache.weekData[key] = r.data
+                    ScheduleCache.putWeekData(key, r.data)
                     syncTodayStore(zs, r.data.first)
                 }
                 else -> Unit
@@ -204,7 +204,7 @@ fun ScheduleScreen() {
         val cachedList = ScheduleCache.weeksList[wkKey]
         val list = (if (force) null else cachedList) ?: when (val w = JwxtApi.getWeeks(selXnm, term.xqm)) {
             is JwxtResult.Ok -> {
-                ScheduleCache.weeksList[wkKey] = w.data
+                ScheduleCache.putWeeks(wkKey, w.data)
                 w.data
             }
             is JwxtResult.SessionExpired -> {
