@@ -79,6 +79,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var profile by remember { mutableStateOf<ProfileCard?>(null) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var showDonate by rememberSaveable { mutableStateOf(false) }
+    var showFeedback by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
     var avatarVersion by rememberSaveable { mutableStateOf(0) }
     val versionName = remember {
@@ -264,78 +265,86 @@ fun ProfileScreen(onLogout: () -> Unit) {
                                 )
                             }
                             Spacer(Modifier.height(2.dp))
-                            Button(
-                                onClick = { showDonate = true },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                    horizontal = 18.dp,
-                                    vertical = 8.dp,
-                                ),
-                            ) {
-                                Icon(
-                                    Icons.Rounded.Favorite,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text("赞助开发者", style = MaterialTheme.typography.labelLarge)
+                            Row {
+                                Button(
+                                    onClick = { showDonate = true },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 18.dp,
+                                        vertical = 8.dp,
+                                    ),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Favorite,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("赞助开发者", style = MaterialTheme.typography.labelLarge)
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                OutlinedButton(
+                                    onClick = { showFeedback = !showFeedback },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 16.dp,
+                                        vertical = 8.dp,
+                                    ),
+                                ) {
+                                    Text("问题反馈", style = MaterialTheme.typography.labelLarge)
+                                }
                             }
 
-                            // ---- 问题反馈 ----
-                            Spacer(Modifier.height(14.dp))
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(MaterialTheme.colorScheme.outlineVariant),
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                "问题反馈",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "遇到问题或有建议？可以到仓库提 Issue，或发邮件给开发者（2335260621@qq.com）。不知道怎么写？点「复制模板」照着填就行。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = {
-                                        runCatching {
-                                            context.startActivity(
-                                                Intent(
-                                                    Intent.ACTION_VIEW,
-                                                    Uri.parse("https://github.com/octmicy/xinyuan-app/issues"),
-                                                ),
-                                            )
-                                        }
-                                    },
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                ) { Text("提 Issue", style = MaterialTheme.typography.labelMedium) }
-                                OutlinedButton(
-                                    onClick = {
-                                        val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                            data = Uri.parse("mailto:2335260621@qq.com")
-                                            putExtra(Intent.EXTRA_SUBJECT, "【新院助手反馈】")
-                                            putExtra(Intent.EXTRA_TEXT, feedbackTemplate(context))
-                                        }
-                                        runCatching {
-                                            context.startActivity(Intent.createChooser(intent, "发送邮件"))
-                                        }
-                                    },
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                ) { Text("发邮件", style = MaterialTheme.typography.labelMedium) }
-                                val clipboard = LocalClipboardManager.current
-                                OutlinedButton(
-                                    onClick = {
-                                        clipboard.setText(AnnotatedString(feedbackTemplate(context)))
-                                        android.widget.Toast.makeText(context, "模板已复制，粘贴到 Issue 或邮件里照着填即可", android.widget.Toast.LENGTH_LONG).show()
-                                    },
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                ) { Text("复制模板", style = MaterialTheme.typography.labelMedium) }
+                            // ---- 问题反馈（点开才展开）----
+                            if (showFeedback) {
+                                Spacer(Modifier.height(12.dp))
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant),
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "遇到问题或有建议？可以到仓库提 Issue，或发邮件给开发者（2335260621@qq.com）。不知道怎么写？点「复制模板」照着填就行。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            runCatching {
+                                                context.startActivity(
+                                                    Intent(
+                                                        Intent.ACTION_VIEW,
+                                                        Uri.parse("https://github.com/octmicy/xinyuan-app/issues"),
+                                                    ),
+                                                )
+                                            }
+                                        },
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    ) { Text("提 Issue", style = MaterialTheme.typography.labelMedium) }
+                                    OutlinedButton(
+                                        onClick = {
+                                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                                data = Uri.parse("mailto:2335260621@qq.com")
+                                                putExtra(Intent.EXTRA_SUBJECT, "【新院助手反馈】")
+                                                putExtra(Intent.EXTRA_TEXT, feedbackTemplate(context))
+                                            }
+                                            runCatching {
+                                                context.startActivity(Intent.createChooser(intent, "发送邮件"))
+                                            }
+                                        },
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    ) { Text("发邮件", style = MaterialTheme.typography.labelMedium) }
+                                    val clipboard = LocalClipboardManager.current
+                                    OutlinedButton(
+                                        onClick = {
+                                            clipboard.setText(AnnotatedString(feedbackTemplate(context)))
+                                            android.widget.Toast.makeText(context, "模板已复制，粘贴到 Issue 或邮件里照着填即可", android.widget.Toast.LENGTH_LONG).show()
+                                        },
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    ) { Text("复制模板", style = MaterialTheme.typography.labelMedium) }
+                                }
                             }
                         }
                     }
