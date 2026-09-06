@@ -84,21 +84,28 @@ internal fun AppWebViewDialog(
     }
     val handler = remember { Handler(Looper.getMainLooper()) }
 
-    // finalHash 注入：落地目标域后设置路由并校验，SPA 未就绪被重置则延迟重试（最多 5 次）
+    // finalHash 注入：落地目标域后直接 loadUrl 导航到目标 hash（同域 hash 变化不重置登录态，
+    // 比 evaluateJavascript 设 hash 更稳），然后读取实际 hash 校验，未到目标则重试（最多 4 次）
     var injectedDone by remember { mutableStateOf(false) }
-    var injectAttempts by remember { mutableIntStateOf(0) }
+    var navAttempts by remember { mutableIntStateOf(0) }
     fun tryInject(): Unit {
         if (injectedDone) return
-        webView.evaluateJavascript(
-            "window.location.hash = '${finalHash?.removePrefix("#") ?: ""}';",
-            null,
-        )
-        injectAttempts++
-        if (injectAttempts >= 5) {
-            injectedDone = true
-        } else {
-            handler.postDelayed({ tryInject() }, 900)
-        }
+        val target = "https://mfindxyc.libsp.cn/#" + (finalHash?.removePrefix("#") ?: "")
+        android.util.Log.d("XycApp", "libsp nav attempt ${navAttempts + 1}: $target")
+        webView.loadUrl(target)
+        navAttempts++
+        // 2.2s 后校验是否已到目标路由，SPA 初始化晚则重试
+        handler.postDelayed({
+            webView.evaluateJavascript("window.location.hash") { h ->
+                android.util.Log.d("XycApp", "libsp current hash=$h")
+                val ok = h?.contains("credential") == true
+                if (ok) {
+                    injectedDone = true
+                } else if (navAttempts < 4) {
+                    tryInject()
+                }
+            }
+        }, 2200)
     }
 
     webView.webChromeClient = object : WebChromeClient() {
