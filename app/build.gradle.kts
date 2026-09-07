@@ -21,8 +21,8 @@ android {
         applicationId = "cn.edu.xyc.campus"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.2.7"
+        versionCode = 10
+        versionName = "0.2.8"
     }
 
     signingConfigs {
@@ -72,4 +72,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
 }
