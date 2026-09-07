@@ -84,28 +84,104 @@ internal fun AppWebViewDialog(
     }
     val handler = remember { Handler(Looper.getMainLooper()) }
 
-    // finalHash 注入：落地目标域后直接 loadUrl 导航到目标 hash（同域 hash 变化不重置登录态，
-    // 比 evaluateJavascript 设 hash 更稳），然后读取实际 hash 校验，未到目标则重试（最多 4 次）
+    // finalHash 直达（图书馆 libsp SPA，dva+hash 路由）。逆向结论：
+    // 门户 href+ticket 链落地 libsp 后，客户端直接改 hash 会被 credential 页守卫
+    // （登录链未完成时 isEmpty(userInfo) → push /login）弹回首页。
+    // 官方深链协议：SPA 下发的 findConfig.mssoLoginUrl（unified-auth.chaoxing.com 入口，
+    // refer 含 find/sso/login/xyc/1?page=Home），把 page= 换成目标路由再走一遍
+    // → chaoxing 会话复用 → 服务端 302 落地 #/<page>?jwt=... → SPA 正常执行 Junmp
+    // 登录链（写 userInfo）并停在目标路由，无任何守卫问题。
+    // 兜底：mssoLoginUrl 读不到时，轮询 sessionStorage.userInfo（visibilitychange
+    // 触发 SPA 自带 updateUserInfo 补登录）就绪后再 hash 导航。
     var injectedDone by remember { mutableStateOf(false) }
+    var injectStarted by remember { mutableStateOf(false) }
+    var injectOrigin by remember { mutableStateOf("") }
     var navAttempts by remember { mutableIntStateOf(0) }
-    fun tryInject(): Unit {
-        if (injectedDone) return
-        val target = "https://mfindxyc.libsp.cn/#" + (finalHash?.removePrefix("#") ?: "")
-        android.util.Log.d("XycApp", "libsp nav attempt ${navAttempts + 1}: $target")
-        webView.loadUrl(target)
-        navAttempts++
-        // 2.2s 后校验是否已到目标路由，SPA 初始化晚则重试
-        handler.postDelayed({
-            webView.evaluateJavascript("window.location.hash") { h ->
-                android.util.Log.d("XycApp", "libsp current hash=$h")
-                val ok = h?.contains("credential") == true
-                if (ok) {
-                    injectedDone = true
-                } else if (navAttempts < 4) {
-                    tryInject()
+    var recoverTries by remember { mutableIntStateOf(0) }
+
+    fun injectPage(): String = finalHash?.removePrefix("#")?.trim('/')?.substringBefore('?') ?: ""
+
+    // 兜底：stage 0 = 检查/恢复登录态；stage 2 = hash 导航目标路由并校验
+    fun injectStep(stage: Int) {
+        if (injectedDone || injectOrigin.isEmpty()) return
+        when (stage) {
+            0 -> webView.evaluateJavascript(
+                "JSON.stringify({u:(sessionStorage.getItem('userInfo')||'').length>0," +
+                    "c:document.cookie.indexOf('jwt=')>=0})",
+            ) { v ->
+                android.util.Log.d("XycApp", "libsp login state=$v")
+                val hasUser = v?.contains("\"u\":true") == true
+                val hasJwt = v?.contains("\"c\":true") == true
+                when {
+                    hasUser -> injectStep(2)
+                    // SPA 自带恢复：visibilitychange → updateUserInfo → getLoginUserInfo 补 userInfo，
+                    // 预置 loginNextPath 让恢复流程自己跳到目标路由
+                    hasJwt && recoverTries < 6 -> {
+                        recoverTries++
+                        val page = injectPage()
+                        webView.evaluateJavascript(
+                            "(function(){try{localStorage.setItem('loginNextPath','/$page');" +
+                                "document.dispatchEvent(new Event('visibilitychange'));return 1}catch(e){return 0}})()",
+                            null,
+                        )
+                        handler.postDelayed({ injectStep(0) }, 1500)
+                    }
+                    navAttempts < 4 -> injectStep(2) // 恢复不了也硬试一次
                 }
             }
-        }, 2200)
+            else -> {
+                navAttempts++
+                val target = injectOrigin + "#" + (finalHash?.removePrefix("#") ?: "")
+                android.util.Log.d("XycApp", "libsp nav attempt $navAttempts: $target")
+                webView.loadUrl(target)
+                handler.postDelayed({
+                    webView.evaluateJavascript("window.location.hash") { h ->
+                        android.util.Log.d("XycApp", "libsp current hash=$h")
+                        if (h?.contains(injectPage()) == true) {
+                            injectedDone = true
+                        } else if (navAttempts < 4) {
+                            injectStep(0)
+                        }
+                    }
+                }, 2200)
+            }
+        }
+    }
+
+    fun verifyHash(attempt: Int, host: String) {
+        if (injectedDone) return
+        handler.postDelayed({
+            if (injectedDone) return@postDelayed
+            webView.evaluateJavascript("window.location.hash") { h ->
+                android.util.Log.d("XycApp", "libsp current hash=$h")
+                when {
+                    h?.contains(injectPage()) == true -> injectedDone = true
+                    attempt < 2 -> verifyHash(attempt + 1, host)
+                    else -> injectStep(0) // 官方链未达 → 轮询兜底
+                }
+            }
+        }, 3500)
+    }
+
+    fun startOfficialDeepLink(host: String) {
+        val page = injectPage()
+        if (page.isEmpty()) return
+        // 从 SPA 配置里取官方 SSO 入口（学校下发的 findConfig），替换 page= 为目标路由
+        webView.evaluateJavascript(
+            "(function(){try{return JSON.parse(localStorage.getItem('findConfig')||'{}').mssoLoginUrl||''}catch(e){return ''}})()",
+        ) { v ->
+            val sso = v?.trim()?.removeSurrounding("\"")?.takeIf { it.startsWith("http") }
+            if (sso != null && sso.contains("page=")) {
+                val target = sso.replace(Regex("page=[A-Za-z0-9_]+"), "page=$page")
+                android.util.Log.d("XycApp", "libsp official sso: $target")
+                webView.loadUrl(target)
+                verifyHash(1, host)
+            } else {
+                android.util.Log.d("XycApp", "libsp no mssoLoginUrl, fallback polling")
+                injectOrigin = "https://$host/"
+                injectStep(0)
+            }
+        }
     }
 
     webView.webChromeClient = object : WebChromeClient() {
@@ -120,9 +196,18 @@ internal fun AppWebViewDialog(
 
         override fun onPageFinished(view: WebView, url: String?) {
             url ?: return
-            // 登录链落地到图书馆域（任何路径）后开始注入目标路由
-            if (finalHash != null && !injectedDone && url.contains("mfindxyc.libsp.cn")) {
-                handler.postDelayed({ tryInject() }, 1200)
+            // 登录链落地图书馆域（任何 libsp 子域）后启动直达；只启动一次，
+            // 避免 loadUrl 触发的 onPageFinished 重复排队
+            val host = runCatching { Uri.parse(url).host.orEmpty() }.getOrNull().orEmpty()
+            android.util.Log.d("XycApp", "libsp page finished url=$url")
+            if (finalHash != null && !injectStarted && host.endsWith("libsp.cn")) {
+                injectStarted = true
+                // 已在目标路由（链路未来变化直达）就无需处理
+                if (url.contains("#/" + injectPage())) {
+                    injectedDone = true
+                } else {
+                    handler.postDelayed({ startOfficialDeepLink(host) }, 800)
+                }
             }
         }
     }

@@ -1,5 +1,8 @@
 package cn.edu.xyc.campus.widget
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
@@ -22,7 +25,9 @@ import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
+import androidx.glance.color.ColorProvider as DayNightProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -43,9 +48,13 @@ import cn.edu.xyc.campus.data.local.ThemeStore
 import cn.edu.xyc.campus.data.local.TodayStore
 import cn.edu.xyc.campus.data.model.Course
 import cn.edu.xyc.campus.data.model.SectionTimes
+import cn.edu.xyc.campus.ui.theme.ThemeModeStore
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** 小组件查看日期的偏移：按 appWidgetId 存 SharedPreferences（每块独立） */
 private const val OFFSET_PREFS = "widget_day_offset"
@@ -94,6 +103,7 @@ class TodayWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         ThemeStore.init(context) // 主题包配色
+        ThemeModeStore.init(context) // 深浅色偏好（闹钟/系统触发渲染时进程里没跑过 MainActivity，必须在此初始化）
         val offset = readOffset(context, offsetKey(context, id))
 
         val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
@@ -117,8 +127,21 @@ class TodayWidget : GlanceAppWidget() {
             .filter { it.dayOfWeek == xqj }
             .sortedWith(compareBy({ it.startSection }, { it.name }))
 
+        // 今天视图：已下课自动消失（结束后自动补位），并排一个"下一节课下课时刻"的精确闹钟
+        // 即时刷新小组件，避免等打开 App 才更新
+        val now = System.currentTimeMillis()
+        val shown = if (offset == 0 && courses.isNotEmpty()) {
+            val remaining = courses.filter { val e = courseEndMillis(it, cal); e < 0 || e > now }
+            scheduleNextRefresh(context, remaining)
+            remaining
+        } else {
+            if (offset == 0) scheduleNextRefresh(context, courses)
+            courses
+        }
+
         val dateShort = "${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日 " +
             WEEKDAYS[cal.get(Calendar.DAY_OF_WEEK) - 1]
+        val todayAllDone = offset == 0 && courses.isNotEmpty() && shown.isEmpty()
         val relTag = when (offset) {
             0 -> ""
             1 -> "明天"
@@ -126,7 +149,7 @@ class TodayWidget : GlanceAppWidget() {
             else -> (if (offset > 0) "+" else "") + offset + "天"
         }
 
-        provideContent { Content(dateShort, relTag, snap, week == null, courses, offset) }
+        provideContent { Content(dateShort, relTag, snap, week == null, shown, offset, todayAllDone) }
     }
 
     @Composable
@@ -137,6 +160,7 @@ class TodayWidget : GlanceAppWidget() {
         noCurrentWeek: Boolean,
         courses: List<Course>,
         offset: Int,
+        todayAllDone: Boolean = false,
     ) {
         val wc = wColors(LocalContext.current)
         val size = LocalSize.current
@@ -152,7 +176,7 @@ class TodayWidget : GlanceAppWidget() {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(ColorProvider(wc.bg))
+                .background(wc.bg)
                 .cornerRadius(16.dp)
                 .clickable(
                     actionStartActivity(
@@ -167,7 +191,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         if (offset == 0) "今日课程" else "课程预览",
                         style = TextStyle(
-                            color = ColorProvider(wc.primary),
+                            color = wc.primary,
                             fontSize = if (compact) 11.sp else 13.sp,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -177,7 +201,7 @@ class TodayWidget : GlanceAppWidget() {
                     if (relTag.isNotEmpty()) {
                         Text(
                             relTag,
-                            style = TextStyle(color = ColorProvider(wc.secondary), fontSize = 10.sp),
+                            style = TextStyle(color = wc.secondary, fontSize = 10.sp),
                             maxLines = 1,
                         )
                     }
@@ -190,7 +214,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         "‹",
                         style = TextStyle(
-                            color = ColorProvider(wc.primary),
+                            color = wc.primary,
                             fontSize = arrowSize,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -201,7 +225,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         dateShort,
                         style = TextStyle(
-                            color = ColorProvider(wc.primary),
+                            color = wc.primary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = androidx.glance.text.TextAlign.Center,
@@ -216,12 +240,12 @@ class TodayWidget : GlanceAppWidget() {
                         Text(
                             "今",
                             style = TextStyle(
-                                color = ColorProvider(wc.primary),
+                                color = wc.primary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                             ),
                             modifier = GlanceModifier
-                                .background(ColorProvider(Color(0xFFD6E3FF)))
+                                .background(CHIP_BG)
                                 .cornerRadius(6.dp)
                                 .clickable(actionRunCallback<DayResetAction>())
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -231,7 +255,7 @@ class TodayWidget : GlanceAppWidget() {
                     Text(
                         "›",
                         style = TextStyle(
-                            color = ColorProvider(wc.primary),
+                            color = wc.primary,
                             fontSize = arrowSize,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -247,7 +271,15 @@ class TodayWidget : GlanceAppWidget() {
                     noCurrentWeek ->
                         Empty("该日不在已同步的教学周内", compact, wc)
                     courses.isEmpty() ->
-                        Empty(if (offset == 0) "今天没有课，好好休息 🎉" else "该日没有课 🎉", compact, wc)
+                        Empty(
+                            when {
+                                todayAllDone -> "今天的课都结束啦 🎉"
+                                offset == 0 -> "今天没有课，好好休息 🎉"
+                                else -> "该日没有课 🎉"
+                            },
+                            compact,
+                            wc,
+                        )
                     else -> {
                         courses.take(maxCourses).forEach { c ->
                             CourseRow(c, compact, large, wc)
@@ -257,7 +289,7 @@ class TodayWidget : GlanceAppWidget() {
                             Text(
                                 "还有 ${courses.size - maxCourses} 门课…",
                                 style = TextStyle(
-                                    color = ColorProvider(wc.secondary),
+                                    color = wc.secondary,
                                     fontSize = 9.sp,
                                 ),
                                 maxLines = 1,
@@ -274,7 +306,7 @@ class TodayWidget : GlanceAppWidget() {
         Text(
             text,
             style = TextStyle(
-                color = ColorProvider(wc.secondary),
+                color = wc.secondary,
                 fontSize = if (compact) 10.sp else 11.sp,
             ),
             maxLines = 2,
@@ -287,7 +319,7 @@ class TodayWidget : GlanceAppWidget() {
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .padding(bottom = if (compact) 3.dp else 4.dp)
-                .background(ColorProvider(wc.card))
+                .background(wc.card)
                 .cornerRadius(8.dp)
                 .padding(
                     horizontal = if (compact) 6.dp else 8.dp,
@@ -304,7 +336,7 @@ class TodayWidget : GlanceAppWidget() {
             }
             Text(
                 label.trim(),
-                style = TextStyle(color = ColorProvider(wc.primary), fontSize = 10.sp),
+                style = TextStyle(color = wc.primary, fontSize = 10.sp),
                 maxLines = 1,
             )
             Spacer(GlanceModifier.width(7.dp))
@@ -312,7 +344,7 @@ class TodayWidget : GlanceAppWidget() {
                 Text(
                     c.name,
                     style = TextStyle(
-                        color = ColorProvider(if (c.isCustom) wc.custom else wc.textDark),
+                        color = if (c.isCustom) wc.custom else wc.textDark,
                         fontSize = if (compact) 10.sp else 11.sp,
                         fontWeight = FontWeight.Medium,
                     ),
@@ -321,13 +353,13 @@ class TodayWidget : GlanceAppWidget() {
                 if (large && c.teacher.isNotEmpty()) {
                     Text(
                         "${c.teacher} · ${c.room}",
-                        style = TextStyle(color = ColorProvider(wc.secondary), fontSize = 9.sp),
+                        style = TextStyle(color = wc.secondary, fontSize = 9.sp),
                         maxLines = 1,
                     )
                 } else if ((!compact || c.isCustom) && c.room.isNotEmpty()) {
                     Text(
                         "@${c.room}",
-                        style = TextStyle(color = ColorProvider(wc.secondary), fontSize = 9.sp),
+                        style = TextStyle(color = wc.secondary, fontSize = 9.sp),
                         maxLines = 1,
                     )
                 }
@@ -339,30 +371,126 @@ class TodayWidget : GlanceAppWidget() {
         // Calendar.DAY_OF_WEEK: 1=周日 … 7=周六
         private val WEEKDAYS = arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
 
-        /** 主题包可覆盖的小组件配色（keys: widgetBg/widgetCard/widgetText/widgetPrimary/widgetSecondary/widgetCustom） */
+        /**
+         * 小组件配色：主题包定义了 widget* 色则日夜都用主题色；
+         * 否则用 Glance 日夜双色（ColorProvider(day, night)），深色系统自动切深色套。
+         * keys: widgetBg/widgetCard/widgetText/widgetPrimary/widgetSecondary/widgetCustom
+         */
         private fun wColors(context: Context): WColors {
-            fun c(key: String, fallback: String) =
-                Color(android.graphics.Color.parseColor(ThemeStore.color(key, fallback)))
+            fun c(key: String, day: String, night: String): ColorProvider {
+                val themed = ThemeStore.color(key, "")
+                if (themed.isNotEmpty()) {
+                    val p = Color(android.graphics.Color.parseColor(themed))
+                    return ColorProvider(p)
+                }
+                val d = Color(android.graphics.Color.parseColor(day))
+                val n = Color(android.graphics.Color.parseColor(night))
+                return when (ThemeModeStore.mode.value) {
+                    ThemeModeStore.Mode.LIGHT -> ColorProvider(d)
+                    ThemeModeStore.Mode.DARK -> ColorProvider(n)
+                    ThemeModeStore.Mode.FOLLOW -> DayNightProvider(d, n)
+                }
+            }
             return WColors(
-                bg = c("widgetBg", "#E8F1FF"),
-                card = c("widgetCard", "#FFFFFF"),
-                primary = c("widgetPrimary", "#1D3F8C"),
-                secondary = c("widgetSecondary", "#6B7B99"),
-                textDark = c("widgetText", "#22304D"),
-                custom = c("widgetCustom", "#8A6D05"),
+                bg = c("widgetBg", "#E8F1FF", "#171C25"),
+                card = c("widgetCard", "#FFFFFF", "#232B38"),
+                primary = c("widgetPrimary", "#1D3F8C", "#ADC6FF"),
+                secondary = c("widgetSecondary", "#6B7B99", "#9FAEC7"),
+                textDark = c("widgetText", "#22304D", "#E1E7F1"),
+                custom = c("widgetCustom", "#8A6D05", "#EFD983"),
             )
         }
     }
 }
 
 private data class WColors(
-    val bg: Color,
-    val card: Color,
-    val primary: Color,
-    val secondary: Color,
-    val textDark: Color,
-    val custom: Color,
+    val bg: ColorProvider,
+    val card: ColorProvider,
+    val primary: ColorProvider,
+    val secondary: ColorProvider,
+    val textDark: ColorProvider,
+    val custom: ColorProvider,
 )
+
+/** "回到今天"徽章底色（日夜双色） */
+private val CHIP_BG = DayNightProvider(Color(0xFFD6E3FF), Color(0xFF2A4A80))
+
+/** 下一节下课时刻的精确刷新闹钟（已下课自动消失的即时性来源） */
+private const val REFRESH_ACTION = "cn.edu.xyc.campus.widget.REFRESH"
+private const val REFRESH_RC = 3001
+
+/** 课程今天的结束时刻（epoch ms）；无法确定返回 -1。自定义时间课用其时间，其余按作息表 */
+private fun courseEndMillis(c: Course, day: Calendar): Long {
+    val endText = when {
+        c.isCustom && c.customTime.isNotEmpty() -> c.customTime.substringAfter('-', "")
+        else -> SectionTimes.tableFor(c.room).getOrNull(c.endSection - 1)?.end
+    } ?: return -1L
+    val parts = endText.split(":")
+    val h = parts.getOrNull(0)?.toIntOrNull() ?: return -1L
+    val m = parts.getOrNull(1)?.toIntOrNull() ?: return -1L
+    return (day.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, h)
+        set(Calendar.MINUTE, m)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+/**
+ * 排下一次小组件刷新：
+ * - 今天还有课没结束 → 在最近的下课时刻刷新（该课自动消失，剩余课程补位）
+ * - 今天没课了 → 次日 00:05 刷新（日期/课程翻新）
+ * 用 setAndAllowWhileIdle 省电且免精确闹钟权限；同requestCode覆盖，无需取消旧闹钟
+ */
+private fun scheduleNextRefresh(context: Context, remaining: List<Course>) {
+    val now = System.currentTimeMillis()
+    val nextEnd = remaining.mapNotNull { courseEndMillis(it, Calendar.getInstance()).takeIf { e -> e > now } }
+        .minOrNull()
+    val trigger = (nextEnd ?: run {
+        (Calendar.getInstance().clone() as Calendar).apply {
+            add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 5)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }).coerceAtLeast(now + 30_000L)
+    val pi = PendingIntent.getBroadcast(
+        context,
+        REFRESH_RC,
+        Intent(context, WidgetRefreshReceiver::class.java).setAction(REFRESH_ACTION),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    runCatching {
+        context.getSystemService(AlarmManager::class.java)
+            .setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+    }
+}
+
+/** 下课时刻/跨天的定时刷新接收器 */
+class WidgetRefreshReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != REFRESH_ACTION) return
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.Default).launch {
+            runCatching { TodayWidget().updateAll(context) }
+            pending.finish()
+        }
+    }
+}
+
+/** 开机刷新小组件：跨天/重启后重渲染（MIUI 自启动白名单会影响此广播，尽力而为） */
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val action = intent.action ?: return
+        if (action != Intent.ACTION_BOOT_COMPLETED && action != "android.intent.action.QUICKBOOT_POWERON") return
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.Default).launch {
+            runCatching { TodayWidget().updateAll(context) }
+            pending.finish()
+        }
+    }
+}
 
 /** 2×2 */
 class TodayWidgetReceiver : GlanceAppWidgetReceiver() {

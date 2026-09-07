@@ -1,5 +1,5 @@
 {
-  "version": "0.2.6",
-  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.2.6/xinyuan-v0.2.6.apk",
-  "notes": "更新下载全面走镜像源：检测更新用的哪个镜像，下载就走哪个，国内不再下载失败"
+  "version": "0.2.7",
+  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.2.7/xinyuan-v0.2.7.apk",
+  "notes": "深色模式全面上线：应用内可切换深浅色（优先于系统夜间模式），小组件同步跟随；小组件已下课自动消失并即时补位；修复图书馆电子证直达；导出课表图片支持主题包配色"
 }

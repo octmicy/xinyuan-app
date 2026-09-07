@@ -2,6 +2,9 @@ package cn.edu.xyc.campus.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.SystemBarStyle
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +50,7 @@ import cn.edu.xyc.campus.data.remote.SessionStore
 import cn.edu.xyc.campus.data.remote.UpdateChecker
 import cn.edu.xyc.campus.ui.screens.LoginScreen
 import cn.edu.xyc.campus.ui.screens.MainTabs
+import cn.edu.xyc.campus.ui.theme.ThemeModeStore
 import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.delay
@@ -61,6 +65,29 @@ fun AppRoot() {
     var introDone by rememberSaveable { mutableStateOf(IntroStore.isDone(context)) }
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var prefill by remember { mutableStateOf<StoredCredential?>(null) }
+
+    // 状态栏/导航栏图标色跟随应用内深浅色（ThemeModeStore 可覆盖系统夜间模式）
+    val appDark = ThemeModeStore.resolvedDark(context)
+    LaunchedEffect(appDark) {
+        (context as? ComponentActivity)?.enableEdgeToEdge(
+            statusBarStyle = if (appDark) {
+                SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT,
+                )
+            },
+            navigationBarStyle = if (appDark) {
+                SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT,
+                )
+            },
+        )
+    }
 
     // 进入主界面后静默检查更新（直连+镜像自动回退；忽略/不再提醒的不弹）
     LaunchedEffect(loggedIn) {

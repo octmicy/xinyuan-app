@@ -22,14 +22,24 @@ import java.util.Locale
 /**
  * 课表导出为图片：用 Canvas 按 1080px 宽绘制周课表
  * （标题 / 星期表头 / 细网格 / 彩色课程格，配色与 App 内一致）。
+ * 主题包生效时取主题色（background/primary/onPrimaryContainer/primaryContainer/widgetSecondary），
+ * 否则用内置默认浅色套——导出图作为分享成品图，始终为浅色版式。
  */
 object ScheduleImageExporter {
 
-    private val BG = Color.parseColor("#F7FAFF")
-    private val GRID = Color.parseColor("#D9E2F2")
-    private val PRIMARY = Color.parseColor("#1E5AA8")
-    private val DARK = Color.parseColor("#173A6B")
-    private val SECONDARY = Color.parseColor("#6B7B99")
+    /** 主题包 key 优先，兜底为内置浅色配色 */
+    private fun t(key: String, fallback: String): Int =
+        Color.parseColor(cn.edu.xyc.campus.data.local.ThemeStore.color(key, fallback))
+
+    private fun colors(): Quintuple = Quintuple(
+        bg = t("background", "#F7FAFF"),
+        grid = t("primaryContainer", "#D9E2F2"),
+        primary = t("primary", "#1E5AA8"),
+        dark = t("onPrimaryContainer", "#173A6B"),
+        secondary = t("widgetSecondary", "#6B7B99"),
+    )
+
+    private data class Quintuple(val bg: Int, val grid: Int, val primary: Int, val dark: Int, val secondary: Int)
 
     /** 生成图片文件，存到 cacheDir/export 目录（png），返回文件 */
     fun export(
@@ -39,6 +49,8 @@ object ScheduleImageExporter {
         weekLabel: String,
         dateRange: String,
     ): File {
+        // 主题色解析（无主题包时为内置浅色套）
+        val (BG, GRID, PRIMARY, DARK, SECONDARY) = colors()
         val width = 1080
         val pad = 40f
         val labelW = 88f

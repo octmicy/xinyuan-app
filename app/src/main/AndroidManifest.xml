@@ -34,6 +34,19 @@
         </provider>
 
         <receiver
+            android:name=".widget.WidgetRefreshReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".widget.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".widget.TodayWidgetReceiver"
             android:exported="false"
             android:label="@string/widget_today_label_2x2">
