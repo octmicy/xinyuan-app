@@ -76,6 +76,9 @@ import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.launch
 import java.io.File
 
+/** 爱发电赞助链接（点「赞助开发者」跳转浏览器打开） */
+private const val AFDIAN_URL = "https://afdian.com/a/octmicy?utm_source=copylink&utm_medium=link"
+
 @Composable
 fun ProfileScreen(onLogout: () -> Unit) {
     val context = LocalContext.current
@@ -84,7 +87,6 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var profile by remember { mutableStateOf<ProfileCard?>(null) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
-    var showDonate by rememberSaveable { mutableStateOf(false) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
     var showThemeMode by rememberSaveable { mutableStateOf(false) }
@@ -302,7 +304,16 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             Spacer(Modifier.height(2.dp))
                             Row {
                                 Button(
-                                    onClick = { showDonate = true },
+                                    onClick = {
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    Uri.parse(AFDIAN_URL),
+                                                ),
+                                            )
+                                        }
+                                    },
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                                         horizontal = 18.dp,
                                         vertical = 8.dp,
@@ -493,10 +504,6 @@ fun ProfileScreen(onLogout: () -> Unit) {
             onDismiss = { manualUpdate = null },
         )
     }
-
-    if (showDonate) {
-        DonateDialog(onDismiss = { showDonate = false })
-    }
 }
 
 /** 反馈模板：新手也能照着填，App 版本自动带上 */
@@ -523,32 +530,6 @@ private fun feedbackTemplate(context: Context): String {
 
         6. 截图（可选，方便的话附一张）
     """.trimIndent()
-}
-
-@Composable
-private fun DonateDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("请作者喝杯奶茶 🧋") },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(
-                    painter = painterResource(R.drawable.donate_wechat),
-                    contentDescription = "微信收款码",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp)),
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "微信扫码赞助 · 金额随意，心意最重要",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
-    )
 }
 
 /** 圆形头像：优先用户上传（filesDir/avatar.jpg），否则内置默认图。点击触发更换。 */
