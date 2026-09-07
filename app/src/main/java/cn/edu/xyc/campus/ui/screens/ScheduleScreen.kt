@@ -106,6 +106,30 @@ internal val COURSE_COLORS = listOf(
     Color(0xFFE8EAED) to Color(0xFF37414F),
 )
 
+/** 深色模式课程卡配色：同色系暗容器 + 亮文字，避免浅色卡片在深色背景上突兀 */
+private val DARK_COURSE_COLORS = listOf(
+    Color(0xFF22304C) to Color(0xFFADC6FF),
+    Color(0xFF3C211D) to Color(0xFFFFB4A4),
+    Color(0xFF1B3524) to Color(0xFF9FD9A4),
+    Color(0xFF362B10) to Color(0xFFF2CC5D),
+    Color(0xFF32204A) to Color(0xFFDDB8F5),
+    Color(0xFF123230) to Color(0xFF7FD8D8),
+    Color(0xFF3D1E2E) to Color(0xFFF5B0D2),
+    Color(0xFF262B33) to Color(0xFFC3CAD6),
+)
+
+private val LIGHT_CUSTOM = Color(0xFFFFF1C9) to Color(0xFF8A6D05)
+private val DARK_CUSTOM = Color(0xFF38300D) to Color(0xFFEFD983)
+
+/** 课程卡配色入口（随应用内深浅色档位切换，与系统夜间模式解耦；导出图片始终用浅色套） */
+@Composable
+internal fun coursePalette(): List<Pair<Color, Color>> =
+    if (cn.edu.xyc.campus.ui.theme.isAppDarkTheme()) DARK_COURSE_COLORS else COURSE_COLORS
+
+@Composable
+internal fun customCourseColor(): Pair<Color, Color> =
+    if (cn.edu.xyc.campus.ui.theme.isAppDarkTheme()) DARK_CUSTOM else LIGHT_CUSTOM
+
 @Composable
 fun ScheduleScreen() {
     val curTerm = remember { TermUtils.current() }
@@ -568,8 +592,8 @@ internal fun CourseDetailDialog(
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
 ) {
-    val idx = (course.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
-    val (bg, fg) = COURSE_COLORS[idx]
+    val idx = (course.name.hashCode().let { if (it < 0) -it else it }) % coursePalette().size
+    val (bg, fg) = if (course.isCustom) customCourseColor() else coursePalette()[idx]
     val weekday = DAY_NAMES.getOrElse(course.dayOfWeek - 1) { "周${course.dayOfWeek}" }
     val range = SectionTimes.rangeText(course.startSection, course.endSection, course.room)
     AlertDialog(
@@ -662,12 +686,12 @@ internal fun Grid(
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val cellH = maxHeight / 12
         val table = SectionTimes.table(timeMain)
-        // 行列细线网格，区分节次行与星期列
+        // 行列细线网格，区分节次行与星期列（颜色跟随主题，深浅色都可读）
+        val line = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
         Canvas(Modifier.matchParentSize()) {
             val rowH = size.height / 12
             val leftCol = 28.dp.toPx()
             val colW = (size.width - leftCol) / 7
-            val line = Color(0x241E5AA8)
             val stroke = 0.75.dp.toPx()
             for (r in 1 until 12) {
                 drawLine(line, Offset(0f, r * rowH), Offset(size.width, r * rowH), stroke)
@@ -862,7 +886,7 @@ private fun RowScope.DayColumn(
                             ) {
                                 Text(
                                     "${c.name}（${DAY_NAMES.getOrElse(c.dayOfWeek - 1) { "" }}第${c.startSection}-${c.endSection}节）",
-                                    color = if (c.isCustom) Color(0xFF8A6D05) else MaterialTheme.colorScheme.onSurface,
+                                    color = if (c.isCustom) customCourseColor().second else MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         }
@@ -883,10 +907,10 @@ private fun CourseCell(
     stacked: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val idx = (c.name.hashCode().let { if (it < 0) -it else it }) % COURSE_COLORS.size
+    val palette = coursePalette()
+    val idx = (c.name.hashCode().let { if (it < 0) -it else it }) % palette.size
     // 自定义课程统一金色系，与教务课区分
-    val (bg, fg) = if (c.isCustom) Color(0xFFFFF1C9) to Color(0xFF8A6D05)
-    else COURSE_COLORS[idx]
+    val (bg, fg) = if (c.isCustom) customCourseColor() else palette[idx]
     // 内容避开重叠带：重叠在顶部→信息靠底；在底部→靠顶；全覆盖→居中
     val hasOverlap = ovBottom - ovTop > 0.01f
     val arrangement = when {

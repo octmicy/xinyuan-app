@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.AlertDialog
@@ -38,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,6 +70,9 @@ import cn.edu.xyc.campus.data.model.ProfileCard
 import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.JwxtResult
 import cn.edu.xyc.campus.data.remote.PortalApi
+import cn.edu.xyc.campus.ui.theme.ThemeModeStore
+import cn.edu.xyc.campus.widget.TodayWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -82,6 +87,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var showDonate by rememberSaveable { mutableStateOf(false) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
+    var showThemeMode by rememberSaveable { mutableStateOf(false) }
     var avatarVersion by rememberSaveable { mutableStateOf(0) }
     val versionName = remember {
         runCatching {
@@ -217,6 +223,36 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         )
                         Spacer(Modifier.width(10.dp))
                         Text("主题外观", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    // ---- 深色模式（跟随系统/浅色/深色，应用内选择优先于系统夜间模式）----
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showThemeMode = true }
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.DarkMode,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("深色模式", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            when (ThemeModeStore.mode.value) {
+                                ThemeModeStore.Mode.FOLLOW -> "跟随系统"
+                                ThemeModeStore.Mode.LIGHT -> "浅色"
+                                ThemeModeStore.Mode.DARK -> "深色"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     // ---- 项目地址 + 赞助 ----
@@ -396,6 +432,56 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
     if (showTheme) {
         ThemeScreenDialog(onDismiss = { showTheme = false })
+    }
+
+    // 深浅色模式切换弹窗（跟随系统/浅色/深色）
+    val setThemeMode: (ThemeModeStore.Mode) -> Unit = { m ->
+        ThemeModeStore.set(context, m)
+        scope.launch { runCatching { TodayWidget().updateAll(context) } }
+    }
+
+    if (showThemeMode) {
+        AlertDialog(
+            onDismissRequest = { showThemeMode = false },
+            title = { Text("深色模式") },
+            text = {
+                Column {
+                    ThemeModeStore.Mode.entries.forEach { m ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    setThemeMode(m)
+                                    showThemeMode = false
+                                }
+                                .padding(horizontal = 4.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = ThemeModeStore.mode.value == m,
+                                onClick = {
+                                    setThemeMode(m)
+                                    showThemeMode = false
+                                },
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                when (m) {
+                                    ThemeModeStore.Mode.FOLLOW -> "跟随系统（夜间模式）"
+                                    ThemeModeStore.Mode.LIGHT -> "浅色"
+                                    ThemeModeStore.Mode.DARK -> "深色"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemeMode = false }) { Text("取消") }
+            },
+        )
     }
 
     manualUpdate?.let { info ->
