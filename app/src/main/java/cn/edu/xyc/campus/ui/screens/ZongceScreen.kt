@@ -1,5 +1,7 @@
 package cn.edu.xyc.campus.ui.screens
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.AlertDialog
@@ -47,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -64,6 +68,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import cn.edu.xyc.campus.data.grades.AvgScoreCalculator
+import cn.edu.xyc.campus.data.local.AvgScorePrefs
+import cn.edu.xyc.campus.data.local.ScheduleCache
+import cn.edu.xyc.campus.data.model.GradeItem
+import cn.edu.xyc.campus.data.remote.JwxtApi
+import cn.edu.xyc.campus.data.remote.JwxtResult
+import cn.edu.xyc.campus.data.remote.TermUtils
 import cn.edu.xyc.campus.data.zongce.ZongceAwardRecord
 import cn.edu.xyc.campus.data.zongce.ZongceBonusCount
 import cn.edu.xyc.campus.data.zongce.ZongceCalculator
@@ -74,6 +85,7 @@ import cn.edu.xyc.campus.data.zongce.ZongceModules
 import cn.edu.xyc.campus.data.zongce.ZongcePenalty
 import cn.edu.xyc.campus.data.zongce.ZongceTables
 import java.util.Calendar
+import kotlinx.coroutines.launch
 
 /**
  * 综测计算器：全屏 Dialog，草稿实时保存（filesDir/zongce_draft.json），结果实时刷新。
@@ -596,9 +608,34 @@ private fun DeSection(draft: ZongceDraft, update: (ZongceDraft) -> Unit) {
 
 @Composable
 private fun ZhiSection(draft: ZongceDraft, update: (ZongceDraft) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+    var importResult by remember { mutableStateOf<ZhiImportResult?>(null) }
+    // 导入结果统一在组合侧消费：用最新 draft 做 copy，避免协程闭包持有旧草稿覆盖用户输入
+    LaunchedEffect(importResult) {
+        when (val r = importResult ?: return@LaunchedEffect) {
+            is ZhiImportResult.Ok -> {
+                update(draft.copy(avgScore = r.avgScore, gpaX1 = r.gpa1, gpaX2 = r.gpa2))
+                Toast.makeText(
+                    context,
+                    "已导入 ${r.yearLabel} 学年平均学分绩 %.2f 与两学期绩点".format(r.avgScore),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            is ZhiImportResult.SessionExpired ->
+                Toast.makeText(context, "登录已过期，请重新登录后导入", Toast.LENGTH_SHORT).show()
+            is ZhiImportResult.Failed ->
+                Toast.makeText(context, "导入失败：${r.message}", Toast.LENGTH_SHORT).show()
+            is ZhiImportResult.NoScores ->
+                Toast.makeText(context, "${r.yearLabel} 学年暂无可参与计算的成绩", Toast.LENGTH_SHORT).show()
+        }
+        importing = false
+        importResult = null
+    }
     SectionCard(
         title = "智育（Z2）",
-        subtitle = "平均学分绩与两学期绩点可在教务系统「成绩查询」页查看，或以学院核算表为准",
+        subtitle = "「从成绩导入」自动取上一学年成绩（综测按上一学年评定）；也可手动填写，以学院核算表为准",
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NumField(
@@ -623,6 +660,29 @@ private fun ZhiSection(draft: ZongceDraft, update: (ZongceDraft) -> Unit) {
                 supportingText = "参考第二学期表格中的『平均学分绩点』",
             )
         }
+        OutlinedButton(
+            onClick = {
+                if (importing) return@OutlinedButton
+                val year = draft.yearKey
+                if (year.isEmpty()) {
+                    Toast.makeText(context, "请先选择学年", Toast.LENGTH_SHORT).show()
+                    return@OutlinedButton
+                }
+                importing = true
+                scope.launch { importResult = importZhiScores(context, year) }
+            },
+            enabled = !importing,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (importing) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(6.dp))
+            } else {
+                Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(if (importing) "导入中…" else "从成绩导入")
+        }
         AwardSection(ZongceModules.ZHI, draft, update)
         HorizontalDivider()
         Text("处罚计次", style = MaterialTheme.typography.titleSmall)
@@ -634,6 +694,62 @@ private fun ZhiSection(draft: ZongceDraft, update: (ZongceDraft) -> Unit) {
             )
         }
     }
+}
+
+// ---------- 智育：从成绩导入 ----------
+
+/** 「从成绩导入」结果：Ok 携带三项指标与实际导入学年，其余为失败态（UI 统一提示，不落草稿） */
+private sealed interface ZhiImportResult {
+    data class Ok(val avgScore: Double, val gpa1: Double, val gpa2: Double, val yearLabel: String) : ZhiImportResult
+    data object SessionExpired : ZhiImportResult
+    data class Failed(val message: String) : ZhiImportResult
+    data class NoScores(val yearLabel: String) : ZhiImportResult
+}
+
+/** 单学期加权平均绩点：与成绩页 summarize 同口径（学分>0 且绩点>0 加权），保留两位；无有效记录为 0.0 */
+private fun termGpa(items: List<GradeItem>): Double {
+    val valid = items.filter { it.credit > 0 && it.gradePoint > 0 }
+    val credits = valid.sumOf { it.credit }
+    if (credits <= 0) return 0.0
+    return Math.round(valid.sumOf { it.gradePoint * it.credit } / credits * 100.0) / 100.0
+}
+
+/** 拉取一学期成绩：ScheduleCache 命中即用，未命中请求教务后写回缓存（缓存键与成绩页一致） */
+private suspend fun loadGradesCached(term: TermUtils.Term): JwxtResult<List<GradeItem>> {
+    val key = ScheduleCache.gradeKey(term.xnm, term.xqm)
+    ScheduleCache.gradeData[key]?.let { return JwxtResult.Ok(it) }
+    val r = JwxtApi.getGrades(term)
+    if (r is JwxtResult.Ok) ScheduleCache.gradeData[key] = r.data
+    return r
+}
+
+/**
+ * 智育「从成绩导入」：
+ * - 综测按上一学年表现评定：草稿学年 yearKey（如 "2026-2027"）的智育数据取其**上一学年**（2025-2026）成绩；
+ * - 平均学分绩：三学期成绩合并去重，按成绩页的勾选排除集（AvgScorePrefs，键与成绩页一致用学年起始年）计算；
+ * - 绩点 X1/X2：第 1/2 学期原始列表按 summarize 口径计算，该学期无有效记录为 0.0。
+ * 任一学期会话失效/请求失败即整体失败，不产出部分结果。
+ */
+private suspend fun importZhiScores(context: Context, yearKey: String): ZhiImportResult {
+    // 综测草稿学年 "2026-2027" → 上一学年起始年 "2025"；教务按学年起始年查询（TermUtils.of 的 xnm 参数），
+    // 缓存键/勾选键随之与成绩页该学年一致
+    val start = yearKey.substringBefore('-').toIntOrNull() ?: return ZhiImportResult.Failed("学年格式不正确")
+    val xnm = (start - 1).toString()
+    val yearLabel = "$xnm-${start}"
+    val lists = mutableListOf<List<GradeItem>>()
+    for (n in 1..3) {
+        when (val r = loadGradesCached(TermUtils.of(xnm, n))) {
+            is JwxtResult.Ok -> lists += r.data
+            is JwxtResult.SessionExpired -> return ZhiImportResult.SessionExpired
+            is JwxtResult.Failed -> return ZhiImportResult.Failed(r.message)
+        }
+    }
+    val avg = AvgScoreCalculator.compute(
+        AvgScoreCalculator.subjects(AvgScoreCalculator.dedupe(lists.flatten())),
+        AvgScorePrefs.getExcluded(context, xnm),
+    ).avgScore ?: return ZhiImportResult.NoScores(yearLabel)
+    // lists 按 1..3 顺序拉取，[0]/[1] 即第 1/2 学期的原始列表
+    return ZhiImportResult.Ok(avg, termGpa(lists[0]), termGpa(lists[1]), yearLabel)
 }
 
 @Composable
