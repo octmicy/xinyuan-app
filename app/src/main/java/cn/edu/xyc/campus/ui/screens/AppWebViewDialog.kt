@@ -79,6 +79,18 @@ internal fun AppWebViewDialog(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.userAgentString = CampusHttp.MOBILE_UA
+            // 兼容性修复（成绩等宽表格页面显示不全）：
+            // - wideViewPort + overviewMode：按页面 viewport 渲染并自适应屏宽
+            // - 混合内容放行：教务老站存在 http 资源，默认阻止会导致内容缺失
+            // - 固定 textZoom=100：系统字体放大时 WebView 文本等比放大易撑破布局
+            // - 双指缩放兜底：页面自身超宽时用户可缩放查看
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.textZoom = 100
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
             setBackgroundColor(AndroidColor.TRANSPARENT)
         }
     }

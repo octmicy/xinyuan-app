@@ -43,17 +43,21 @@ import cn.edu.xyc.campus.data.local.IntroStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.StoredCredential
 import cn.edu.xyc.campus.data.local.TodayStore
+import cn.edu.xyc.campus.data.remote.CredentialLauncher
+import cn.edu.xyc.campus.data.remote.CredentialTarget
 import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.LoginResult
 import cn.edu.xyc.campus.data.remote.PortalApi
 import cn.edu.xyc.campus.data.remote.SessionStore
 import cn.edu.xyc.campus.data.remote.UpdateChecker
+import cn.edu.xyc.campus.ui.screens.AppWebViewDialog
 import cn.edu.xyc.campus.ui.screens.LoginScreen
 import cn.edu.xyc.campus.ui.screens.MainTabs
 import cn.edu.xyc.campus.ui.theme.ThemeModeStore
 import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -65,6 +69,8 @@ fun AppRoot() {
     var introDone by rememberSaveable { mutableStateOf(IntroStore.isDone(context)) }
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var prefill by remember { mutableStateOf<StoredCredential?>(null) }
+    // 「图书馆电子证」小组件点击 → 弹应用内 WebView 直达（顶层弹出，任意 tab 均生效）
+    var credentialTarget by remember { mutableStateOf<CredentialTarget?>(null) }
 
     // 状态栏/导航栏图标色跟随应用内深浅色（ThemeModeStore 可覆盖系统夜间模式）
     val appDark = ThemeModeStore.resolvedDark(context)
@@ -145,6 +151,33 @@ fun AppRoot() {
                 UpdateChecker.setNeverRemind(context)
                 updateInfo = null
             },
+        )
+    }
+
+    // 小组件「图书馆电子证」点击事件（Channel 一次性消费，不会跨启动重放）：
+    // 解析目标（未登录时内部等待自动登录）→ 弹应用内 WebView
+    LaunchedEffect(Unit) {
+        CredentialLauncher.requests.consumeAsFlow().collect {
+            val target = CredentialLauncher.resolveTarget(context)
+            if (target == null) {
+                android.widget.Toast.makeText(
+                    context,
+                    if (SessionStore.token.isNullOrEmpty()) "请先登录后再使用小组件" else "未找到图书馆入口，请打开应用检查",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                credentialTarget = target
+            }
+        }
+    }
+
+    // 电子证直达 WebView（与宫格「图书馆电子证」同链路：ticket 免密 + SPA 自动落地目标路由）
+    credentialTarget?.let { t ->
+        AppWebViewDialog(
+            name = t.name,
+            url = t.url,
+            finalHash = t.finalHash,
+            onDismiss = { credentialTarget = null },
         )
     }
 

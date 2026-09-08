@@ -1,5 +1,5 @@
 {
-  "version": "0.2.9",
-  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.2.9/xinyuan-v0.2.9.apk",
-  "notes": "全新「平均学分绩」计算：成绩页按学年合并计算加权平均分，弹出小页面勾选参与科目（默认全选，创新创业默认排除，跨学期重复课程严格取第一学期）；综测计算器智育模块支持从成绩一键导入（自动取上一学年）；应用图标深色模式适配；跟随系统状态显示更清晰"
+  "version": "0.3.0",
+  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.3.0/xinyuan-v0.3.0.apk",
+  "notes": "应用宫格升级：长按拖拽排序（桌面级跟手手感）、右上角可隐藏应用，顺序与显隐本地保存；新增「图书馆电子证」1×1 桌面小组件，点击一键直达；修复内置网页教务成绩显示不全（viewport/混合内容/字体缩放兼容）"
 }
