@@ -21,8 +21,8 @@ android {
         applicationId = "cn.edu.xyc.campus"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "0.2.9"
+        versionCode = 12
+        versionName = "0.3.0"
     }
 
     signingConfigs {
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.reorderable) // 宫格拖拽重排（Launcher 式跟手 + 让位动画）
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation("junit:junit:4.13.2")
 }

@@ -1,5 +1,6 @@
 package cn.edu.xyc.campus
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,6 +10,7 @@ import cn.edu.xyc.campus.data.local.CredStore
 import cn.edu.xyc.campus.data.local.CustomCourseStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.ThemeStore
+import cn.edu.xyc.campus.data.remote.CredentialLauncher
 import cn.edu.xyc.campus.ui.AppRoot
 import cn.edu.xyc.campus.ui.theme.ThemeModeStore
 import cn.edu.xyc.campus.ui.theme.XycCampusTheme
@@ -32,10 +34,25 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             runCatching { TodayWidget().updateAll(this@MainActivity) }
         }
+        handleCredentialIntent(intent)
         setContent {
             XycCampusTheme {
                 AppRoot()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // singleTop 复用已开实例：小组件点击走这里触发电子证直达
+        handleCredentialIntent(intent)
+    }
+
+    private fun handleCredentialIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(CredentialLauncher.EXTRA_OPEN_CREDENTIAL, false) == true) {
+            // 一次性消费：立即移除标记，防止系统重放任务 baseIntent（最近任务/桌面恢复）时重复直达电子证
+            intent.removeExtra(CredentialLauncher.EXTRA_OPEN_CREDENTIAL)
+            CredentialLauncher.request()
         }
     }
 }

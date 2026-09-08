@@ -7,4 +7,6 @@
     <string name="widget_today_label_3x4">今日课程 3×4</string>
     <string name="widget_today_label_4x4">今日课程 4×4</string>
     <string name="widget_today_desc">显示课程安排，可翻看日期，点击打开新院助手</string>
+    <string name="widget_credential_label">图书馆电子证</string>
+    <string name="widget_credential_desc">点击一键直达图书馆电子证</string>
 </resources>
