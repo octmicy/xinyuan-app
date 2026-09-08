@@ -46,6 +46,7 @@ import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.model.ThirdApp
 import cn.edu.xyc.campus.data.remote.PortalApi
 import cn.edu.xyc.campus.data.remote.SessionStore
+import cn.edu.xyc.campus.ui.theme.isAppDarkTheme
 
 /** 应用白名单：门户名称 → 展示名 / 本地图标 /（可选）SPA 落地路由 */
 private data class AppEntry(
@@ -210,7 +211,7 @@ private fun AppCell(
             .clickable(onClick = onClick)
             .padding(4.dp),
     ) {
-        // 白色圆角卡片托底，贴纸图标带投影
+        // 图标卡片托底：浅色白底 / 深色深灰黑底（贴纸四边透明，底色即观感背景）
         Box(
             Modifier
                 .fillMaxWidth()
@@ -218,7 +219,7 @@ private fun AppCell(
                 .padding(horizontal = 4.dp)
                 .shadow(3.dp, RoundedCornerShape(20.dp))
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color.White)
+                .background(if (isAppDarkTheme()) Color(0xFF17181A) else Color.White)
                 .padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {

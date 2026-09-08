@@ -49,6 +49,14 @@ object TermUtils {
         val y = xnm.toIntOrNull() ?: return xnm
         return "$y-${y + 1}"
     }
+
+    /** 成绩响应 xqm 字段（3/12/16）→ 学期序号（1/2/3），未知值原样返回 */
+    fun xqmToTermNo(xqm: Int): Int = when (xqm) {
+        3 -> 1
+        12 -> 2
+        16 -> 3
+        else -> xqm
+    }
 }
 
 /** 教务数据结果 */

@@ -248,7 +248,9 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         Spacer(Modifier.weight(1f))
                         Text(
                             when (ThemeModeStore.mode.value) {
-                                ThemeModeStore.Mode.FOLLOW -> "跟随系统"
+                                // 跟随系统时附带当前实际生效的模式，避免"手机浅色却只见深色字样"的困惑
+                                ThemeModeStore.Mode.FOLLOW ->
+                                    "跟随系统（当前${if (ThemeModeStore.isSystemDark(context)) "深色" else "浅色"}）"
                                 ThemeModeStore.Mode.LIGHT -> "浅色"
                                 ThemeModeStore.Mode.DARK -> "深色"
                             },
@@ -479,7 +481,9 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 when (m) {
-                                    ThemeModeStore.Mode.FOLLOW -> "跟随系统（夜间模式）"
+                                    // 跟随系统动态标注当前系统实际模式（而非固定的"夜间模式"字样）
+                                    ThemeModeStore.Mode.FOLLOW ->
+                                        "跟随系统（当前${if (ThemeModeStore.isSystemDark(context)) "深色" else "浅色"}）"
                                     ThemeModeStore.Mode.LIGHT -> "浅色"
                                     ThemeModeStore.Mode.DARK -> "深色"
                                 },
