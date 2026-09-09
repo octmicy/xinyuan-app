@@ -20,6 +20,9 @@ sealed class LoginResult {
 
     /** 网络或程序异常 */
     data class Error(val throwable: Throwable) : LoginResult()
+
+    /** 登录超过 60 秒仍未完成（多为未连校园网） */
+    data object Timeout : LoginResult()
 }
 
 /** 登录态内存持有（M4 再做加密持久化） */
@@ -40,6 +43,7 @@ object PortalApi {
     /**
      * 账密登录门户（loginType=2，3DES 加密链见 CryptoUtil）。
      * 接口: POST /api/v4/api/login
+     * 60 秒整链路超时（callTimeout）：校园网外或网络拥塞时快速失败，不再无限等待。
      */
     suspend fun login(account: String, password: String): LoginResult = withContext(Dispatchers.IO) {
         try {
@@ -57,7 +61,11 @@ object PortalApi {
                 .header("Origin", BASE)
                 .post(form)
                 .build()
-            CampusHttp.client.newCall(req).execute().use { resp ->
+            // 独立 client：仅登录链路加 60s callTimeout（复用连接池与 CookieJar）
+            val client = CampusHttp.client.newBuilder()
+                .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 val obj = JSONObject(body)
                 when (val code = obj.optString("code")) {
@@ -70,6 +78,11 @@ object PortalApi {
                     else -> LoginResult.Failure(code, obj.optString("message"))
                 }
             }
+        } catch (e: java.io.InterruptedIOException) {
+            // callTimeout 到点抛 InterruptedIOException → 视为登录超时
+            LoginResult.Timeout
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
         } catch (t: Throwable) {
             LoginResult.Error(t)
         }

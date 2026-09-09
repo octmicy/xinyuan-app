@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,8 +70,40 @@ fun AppRoot() {
     var introDone by rememberSaveable { mutableStateOf(IntroStore.isDone(context)) }
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var prefill by remember { mutableStateOf<StoredCredential?>(null) }
+    // 自动登录失败/超时落到登录页时展示的提示（如"请连接校园网"）
+    var loginMessage by remember { mutableStateOf("") }
     // 「图书馆电子证」小组件点击 → 弹应用内 WebView 直达（顶层弹出，任意 tab 均生效）
     var credentialTarget by remember { mutableStateOf<CredentialTarget?>(null) }
+
+    // 后台久置（>10 分钟）回前台时静默重登：门户会话过期会导致接口全部加载失败
+    val activity = context as? ComponentActivity
+    var stoppedAt by remember { mutableStateOf(0L) }
+    DisposableEffect(activity) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> stoppedAt = System.currentTimeMillis()
+                androidx.lifecycle.Lifecycle.Event.ON_START -> {
+                    val away = System.currentTimeMillis() - stoppedAt
+                    if (stoppedAt > 0 && away > 10 * 60_000L && loggedIn) {
+                        scope.launch {
+                            val cred = CredStore.load() ?: return@launch
+                            when (val r = PortalApi.login(cred.account, cred.password)) {
+                                is LoginResult.Success -> {
+                                    SessionStore.token = r.token
+                                    SessionStore.account = cred.account
+                                    ScheduleCache.clear() // 会话已换新，各页重新拉取
+                                }
+                                else -> Unit // 静默失败：等接口报会话过期时由页面级重试兜底
+                            }
+                        }
+                    }
+                }
+                else -> Unit
+            }
+        }
+        activity?.lifecycle?.addObserver(observer)
+        onDispose { activity?.lifecycle?.removeObserver(observer) }
+    }
 
     // 状态栏/导航栏图标色跟随应用内深浅色（ThemeModeStore 可覆盖系统夜间模式）
     val appDark = ThemeModeStore.resolvedDark(context)
@@ -126,6 +159,15 @@ fun AppRoot() {
                 SessionStore.token = r.token
                 SessionStore.account = cred.account
                 loggedIn = true
+                loginMessage = ""
+                // 登录前就添加了课表小组件的场景：拿到会话后立即刷新一次
+                runCatching { TodayWidget().updateAll(context) }
+            }
+            is LoginResult.Timeout -> {
+                // 登录超时：退回登录页并提示检查网络（多为使用流量未连校园网）
+                android.util.Log.e("XycApp", "auto login timeout")
+                prefill = cred
+                loginMessage = "登录超时。如果你现在正在使用流量，请连接校园网后再尝试登录。"
             }
             else -> {
                 android.util.Log.e("XycApp", "auto login failed: $r")
@@ -218,7 +260,12 @@ fun AppRoot() {
         else -> LoginScreen(
             initialAccount = prefill?.account.orEmpty(),
             initialPassword = prefill?.password.orEmpty(),
-            onLoginSuccess = { loggedIn = true },
+            initialMessage = loginMessage,
+            onLoginSuccess = {
+                // 手动登录成功同样立即刷新课表小组件
+                scope.launch { runCatching { TodayWidget().updateAll(context) } }
+                loggedIn = true
+            },
         )
     }
 }

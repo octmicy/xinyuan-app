@@ -16,6 +16,7 @@ object AvgScorePrefs {
 
     private const val PREFS = "avg_score_prefs"
     private const val PREFIX = "excluded_"
+    private const val KEY_CARD_HIDDEN = "card_hidden"
 
     private fun keyOf(yearKey: String) = "$PREFIX$yearKey"
 
@@ -43,5 +44,15 @@ object AvgScorePrefs {
             editor.putStringSet(keyOf(yearKey), HashSet(keys))
         }
         editor.apply()
+    }
+
+    /** 成绩页「平均学分绩」卡片是否被用户隐藏（全局开关，默认显示）。 */
+    fun isCardHidden(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_CARD_HIDDEN, false)
+
+    fun setCardHidden(context: Context, hidden: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_CARD_HIDDEN, hidden).apply()
     }
 }

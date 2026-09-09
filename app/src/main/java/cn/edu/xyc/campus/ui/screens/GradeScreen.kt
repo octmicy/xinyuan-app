@@ -17,9 +17,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,12 +68,15 @@ private fun summarize(items: List<GradeItem>): GpaSummary {
 @Composable
 fun GradeScreen() {
     val curTerm = remember { TermUtils.current() }
+    val context = LocalContext.current
     var selXnm by rememberSaveable { mutableStateOf(curTerm.xnm) }
     var termNo by rememberSaveable { mutableStateOf(curTerm.termNo) }
     var loading by rememberSaveable { mutableStateOf(true) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var grades by remember { mutableStateOf<List<GradeItem>>(emptyList()) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    // 「平均学分绩」卡片显隐（右上角开关，全局持久化；隐藏后整卡移除不占位）
+    var avgCardHidden by remember { mutableStateOf(AvgScorePrefs.isCardHidden(context)) }
     val yearOptions = remember {
         val y = curTerm.xnm.toIntOrNull() ?: 2026
         (0..3).map { (y - it).toString() }
@@ -104,19 +113,39 @@ fun GradeScreen() {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         )
 
-        // 学年切换
+        // 学年切换 + 右上角「平均学分绩」显隐开关（持久化；隐藏后卡片完全移除，不占位）
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            yearOptions.forEach { y ->
-                FilterChip(
-                    selected = selXnm == y,
-                    onClick = { selXnm = y },
-                    label = { Text(TermUtils.xnmToLabel(y)) },
+            Row(
+                Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                yearOptions.forEach { y ->
+                    FilterChip(
+                        selected = selXnm == y,
+                        onClick = { selXnm = y },
+                        label = { Text(TermUtils.xnmToLabel(y)) },
+                    )
+                }
+            }
+            IconButton(
+                onClick = {
+                    avgCardHidden = !avgCardHidden
+                    AvgScorePrefs.setCardHidden(context, avgCardHidden)
+                },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    if (avgCardHidden) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                    contentDescription = if (avgCardHidden) "显示平均学分绩" else "隐藏平均学分绩",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -137,8 +166,8 @@ fun GradeScreen() {
             }
         }
 
-        // 平均学分绩卡片（独立数据流，不影响下方成绩列表）
-        AvgScoreCard(selXnm)
+        // 平均学分绩卡片（独立数据流，不影响下方成绩列表）；隐藏后整卡移除
+        if (!avgCardHidden) AvgScoreCard(selXnm)
 
         when {
             loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

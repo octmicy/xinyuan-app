@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     initialAccount: String = "",
     initialPassword: String = "",
+    initialMessage: String = "",
     onLoginSuccess: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -72,6 +73,8 @@ fun LoginScreen(
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var rememberPwd by rememberSaveable { mutableStateOf(true) }
     var loading by rememberSaveable { mutableStateOf(false) }
+    // 自动登录超时等场景传入的顶部提示（如"请连接校园网后再试"）
+    var banner by rememberSaveable { mutableStateOf(initialMessage) }
 
     fun doLogin() {
         if (studentId.isBlank() || password.isBlank()) {
@@ -89,12 +92,17 @@ fun LoginScreen(
                     onLoginSuccess()
                     null
                 }
+                is LoginResult.Timeout ->
+                    "登录超时。如果你现在正在使用流量，请连接校园网后再尝试登录。"
                 is LoginResult.NeedSms ->
                     "该设备首次登录需短信验证（${r.message}）。请先用浏览器登录一次门户完成设备绑定后再试。"
                 is LoginResult.Failure -> "登录失败[${r.code}] ${r.message}"
                 is LoginResult.Error -> "网络异常: ${r.throwable.message}"
             }
-            msg?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            msg?.let {
+                banner = it
+                Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            }
             loading = false
         }
     }
@@ -137,6 +145,24 @@ fun LoginScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // 顶部提示条（自动登录超时等场景）
+            if (banner.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    banner,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                            RoundedCornerShape(10.dp),
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
 
             Spacer(Modifier.height(32.dp))
             OutlinedTextField(
