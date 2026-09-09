@@ -82,15 +82,19 @@ internal fun AppWebViewDialog(
             // 兼容性修复（成绩等宽表格页面显示不全）：
             // - wideViewPort + overviewMode：按页面 viewport 渲染并自适应屏宽
             // - 混合内容放行：教务老站存在 http 资源，默认阻止会导致内容缺失
+            // - 第三方 Cookie 放行：门户 SSO 跨域跳教务域，默认拒绝会丢会话/资源
+            // - TEXT_AUTOSIZING：按 viewport 智能调字体，避免固定行高撑破布局
             // - 固定 textZoom=100：系统字体放大时 WebView 文本等比放大易撑破布局
             // - 双指缩放兜底：页面自身超宽时用户可缩放查看
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.layoutAlgorithm = android.webkit.WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING
             settings.textZoom = 100
             settings.setSupportZoom(true)
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
+            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             setBackgroundColor(AndroidColor.TRANSPARENT)
         }
     }
@@ -221,6 +225,25 @@ internal fun AppWebViewDialog(
                     handler.postDelayed({ startOfficialDeepLink(host) }, 800)
                 }
             }
+            // 兼容补丁：正方移动端页面在 WebView 下 body/.mui-content 高度塌陷为 0，
+            // 文档不可滚动 → 首屏之外的成绩看不到（实测 DevTools: body h=0、docScrollH=innerHeight）。
+            // 延迟到页面 JS 初始化后检测，确认塌陷才把高度链改回 auto 恢复滚动。
+            if (host.endsWith("xyc.edu.cn")) {
+                handler.postDelayed({
+                    view.evaluateJavascript(
+                        "(function(){try{" +
+                            "var de=document.documentElement,b=document.body;" +
+                            "if(!b) return 'no-body';" +
+                            "if(b.getBoundingClientRect().height===0||document.documentElement.scrollHeight<=innerHeight){" +
+                            "de.style.height='auto';" +
+                            "b.style.height='auto';b.style.overflowY='auto';" +
+                            "var mc=document.querySelector('.mui-content');if(mc)mc.style.height='auto';" +
+                            "var sc=document.querySelector('.mui-scroll-wrapper');if(sc)sc.style.height='auto';" +
+                            "return 'patched:'+document.documentElement.scrollHeight" +
+                            "} return 'skip'}catch(e){return 'err:'+e.message}})()",
+                    ) { v -> android.util.Log.d("XycApp", "body-collapse patch: $v") }
+                }, 1200)
+            }
         }
     }
 
@@ -229,8 +252,13 @@ internal fun AppWebViewDialog(
         webView.loadUrl(url)
     }
 
+    // 返回 = 网页有历史先回退上一页；到底了才关闭窗口（系统返回键与顶栏按钮同逻辑）
+    fun goBackOrClose() {
+        if (webView.canGoBack()) webView.goBack() else onDismiss()
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { goBackOrClose() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Column(
@@ -251,10 +279,10 @@ internal fun AppWebViewDialog(
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = { goBackOrClose() }) {
                         Icon(
                             Icons.AutoMirrored.Rounded.ArrowBack,
-                            "返回",
+                            if (webView.canGoBack()) "返回上一页" else "关闭",
                             tint = MaterialTheme.colorScheme.onPrimary,
                         )
                     }
