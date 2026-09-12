@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.edu.xyc.campus.R
 import cn.edu.xyc.campus.data.local.CredStore
+import cn.edu.xyc.campus.data.local.CrashLog
 import cn.edu.xyc.campus.data.local.IntroStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.StoredCredential
@@ -54,6 +55,7 @@ import cn.edu.xyc.campus.data.remote.UpdateChecker
 import cn.edu.xyc.campus.ui.screens.AppWebViewDialog
 import cn.edu.xyc.campus.ui.screens.LoginScreen
 import cn.edu.xyc.campus.ui.screens.MainTabs
+import cn.edu.xyc.campus.ui.screens.feedbackTemplate
 import cn.edu.xyc.campus.ui.theme.ThemeModeStore
 import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
@@ -192,6 +194,44 @@ fun AppRoot() {
             onNeverRemind = {
                 UpdateChecker.setNeverRemind(context)
                 updateInfo = null
+            },
+        )
+    }
+
+    // 本地崩溃日志检测：上次异常退出的残留日志 → 提示一键附带进反馈模板（不联网上传）
+    var crashFiles by remember { mutableStateOf(CrashLog.pending(context)) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    if (crashFiles.isNotEmpty()) {
+        val brief = runCatching { crashFiles.first().readText().take(300) }.getOrDefault("")
+        AlertDialog(
+            onDismissRequest = { crashFiles = emptyList() }, // 点外部仅收起，日志保留待下次询问
+            title = { Text("上次异常退出") },
+            text = {
+                Text(
+                    brief.ifBlank { "检测到崩溃日志" },
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 6,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val full = (CrashLog.summary(context)?.let { "$it\n\n" } ?: "") + feedbackTemplate(context)
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(full))
+                    android.widget.Toast.makeText(
+                        context,
+                        "已复制反馈文本（含崩溃日志），可粘贴到 Issue 或邮件发送",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                    CrashLog.clear(context)
+                    crashFiles = emptyList()
+                }) { Text("复制反馈并清理") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    CrashLog.clear(context)
+                    crashFiles = emptyList()
+                }) { Text("删除日志") }
             },
         )
     }
