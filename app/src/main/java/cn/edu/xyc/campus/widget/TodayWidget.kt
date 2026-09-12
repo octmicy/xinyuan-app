@@ -127,15 +127,26 @@ class TodayWidget : GlanceAppWidget() {
             .filter { it.dayOfWeek == xqj }
             .sortedWith(compareBy({ it.startSection }, { it.name }))
 
-        // 今天视图：已下课自动消失（结束后自动补位），并排一个"下一节课下课时刻"的精确闹钟
+        // 今天视图：已下课自动消失（结束后自动补位），并排一个"下一个关键时刻"的精确闹钟
         // 即时刷新小组件，避免等打开 App 才更新
+        // 课前提醒：now ∈ [最近一节未开始课程的开始-10min, 开始+5min] 时，整卡切换为提醒态
         val now = System.currentTimeMillis()
-        val shown = if (offset == 0 && courses.isNotEmpty()) {
+        var reminderCourse: Course? = null
+        var reminderStartMs = 0L
+        val shown: List<Course> = if (offset == 0 && courses.isNotEmpty()) {
             val remaining = courses.filter { val e = courseEndMillis(it, cal); e < 0 || e > now }
-            scheduleNextRefresh(context, remaining)
+            scheduleNextRefresh(context, remaining, cal)
+            // 最近一节未开始的课（相邻课窗口重叠时自然取最近开始者）
+            val upcoming = remaining
+                .mapNotNull { c -> courseStartMillis(c, cal).takeIf { s -> s > now }?.let { s -> c to s } }
+                .minByOrNull { it.second }
+            if (upcoming != null && now >= upcoming.second - PRE_REMIND_MS) {
+                reminderCourse = upcoming.first
+                reminderStartMs = upcoming.second
+            }
             remaining
         } else {
-            if (offset == 0) scheduleNextRefresh(context, courses)
+            if (offset == 0) scheduleNextRefresh(context, courses, cal)
             courses
         }
 
@@ -149,7 +160,106 @@ class TodayWidget : GlanceAppWidget() {
             else -> (if (offset > 0) "+" else "") + offset + "天"
         }
 
-        provideContent { Content(dateShort, relTag, snap, week == null, shown, offset, todayAllDone) }
+        provideContent {
+            val rc = reminderCourse
+            if (rc != null) {
+                // 课前提醒态：整卡突出显示接下来要上的课（地点强调）
+                ReminderContent(rc, reminderStartMs)
+            } else {
+                Content(dateShort, relTag, snap, week == null, shown, offset, todayAllDone)
+            }
+        }
+    }
+
+    /** 课前提醒态：徽章 + 倒计时、大字课程名、突出地点、节次与时间 */
+    @Composable
+    private fun ReminderContent(c: Course, startMs: Long) {
+        val wc = wColors(LocalContext.current)
+        val size = LocalSize.current
+        val compact = size.height < 170.dp
+        val now = System.currentTimeMillis()
+        val diffMin = ((startMs - now + 30_000) / 60_000).toInt()
+        val statusText = if (diffMin > 0) "还有 $diffMin 分钟上课" else "已经开始上课"
+        val table = SectionTimes.tableFor(c.room)
+        val timeText = if (c.isCustom && c.customTime.isNotEmpty()) {
+            c.customTime
+        } else {
+            val st = table.getOrNull(c.startSection - 1)?.start.orEmpty()
+            val en = table.getOrNull(c.endSection - 1)?.end.orEmpty()
+            if (st.isEmpty() || en.isEmpty()) "第${c.startSection}-${c.endSection}节"
+            else "第${c.startSection}-${c.endSection}节 $st–$en"
+        }
+
+        Box(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .background(wc.bg)
+                .cornerRadius(16.dp)
+                .padding(if (compact) 8.dp else 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 「即将上课」徽章：主题主色底 + 反白文字
+                    Box(
+                        modifier = GlanceModifier
+                            .background(wc.primary)
+                            .cornerRadius(6.dp)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            "即将上课",
+                            style = TextStyle(
+                                color = ColorProvider(Color.White), // 固定反白（勿传 Int：会命中资源 ID 重载导致崩溃）
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                        )
+                    }
+                    Spacer(GlanceModifier.width(6.dp))
+                    Text(
+                        statusText,
+                        style = TextStyle(color = wc.secondary, fontSize = 11.sp),
+                        maxLines = 1,
+                    )
+                }
+                Spacer(GlanceModifier.height(if (compact) 4.dp else 8.dp))
+                Text(
+                    c.name,
+                    style = TextStyle(
+                        color = wc.primary,
+                        fontSize = if (compact) 14.sp else 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    maxLines = 1,
+                )
+                Spacer(GlanceModifier.height(if (compact) 3.dp else 6.dp))
+                // 地点强调：主色大字（本提醒的核心信息）
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "@",
+                        style = TextStyle(color = wc.secondary, fontSize = if (compact) 12.sp else 14.sp),
+                    )
+                    Text(
+                        c.room,
+                        style = TextStyle(
+                            color = wc.primary,
+                            fontSize = if (compact) 16.sp else 20.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        maxLines = 1,
+                    )
+                }
+                if (!compact) {
+                    Spacer(GlanceModifier.height(4.dp))
+                    Text(
+                        timeText,
+                        style = TextStyle(color = wc.secondary, fontSize = 10.sp),
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 
     @Composable
@@ -415,9 +525,30 @@ private data class WColors(
 /** "回到今天"徽章底色（日夜双色） */
 private val CHIP_BG = DayNightProvider(Color(0xFFD6E3FF), Color(0xFF2A4A80))
 
+/** 课前提醒窗口：上课前 10 分钟进入提醒态，上课 5 分钟后恢复课表 */
+private const val PRE_REMIND_MS = 10 * 60_000L
+private const val POST_REMIND_MS = 5 * 60_000L
+
 /** 下一节下课时刻的精确刷新闹钟（已下课自动消失的即时性来源） */
 private const val REFRESH_ACTION = "cn.edu.xyc.campus.widget.REFRESH"
 private const val REFRESH_RC = 3001
+
+/** 课程今天的开始时刻（epoch ms）；无法确定返回 -1。自定义时间课用其时间，其余按作息表 */
+private fun courseStartMillis(c: Course, day: Calendar): Long {
+    val startText = when {
+        c.isCustom && c.customTime.isNotEmpty() -> c.customTime.substringBefore('-')
+        else -> SectionTimes.tableFor(c.room).getOrNull(c.startSection - 1)?.start
+    } ?: return -1L
+    val parts = startText.split(":")
+    val h = parts.getOrNull(0)?.toIntOrNull() ?: return -1L
+    val m = parts.getOrNull(1)?.toIntOrNull() ?: return -1L
+    return (day.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, h)
+        set(Calendar.MINUTE, m)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
 
 /** 课程今天的结束时刻（epoch ms）；无法确定返回 -1。自定义时间课用其时间，其余按作息表 */
 private fun courseEndMillis(c: Course, day: Calendar): Long {
@@ -439,14 +570,23 @@ private fun courseEndMillis(c: Course, day: Calendar): Long {
 /**
  * 排下一次小组件刷新：
  * - 今天还有课没结束 → 在最近的下课时刻刷新（该课自动消失，剩余课程补位）
+ * - 课前提醒：每节未开始课程的 开始-10min（进入提醒态）与 开始+5min（恢复课表）也是触发点
  * - 今天没课了 → 次日 00:05 刷新（日期/课程翻新）
- * 用 setAndAllowWhileIdle 省电且免精确闹钟权限；同requestCode覆盖，无需取消旧闹钟
+ * 取距 now 最近的候选点排单个闹钟（同 requestCode 覆盖），触发后重排。
+ * 用 setAndAllowWhileIdle 省电且免精确闹钟权限；Doze/厂商省电下可能有分钟级延迟。
  */
-private fun scheduleNextRefresh(context: Context, remaining: List<Course>) {
+private fun scheduleNextRefresh(context: Context, remaining: List<Course>, today: Calendar) {
     val now = System.currentTimeMillis()
-    val nextEnd = remaining.mapNotNull { courseEndMillis(it, Calendar.getInstance()).takeIf { e -> e > now } }
-        .minOrNull()
-    val trigger = (nextEnd ?: run {
+    val candidates = buildList {
+        remaining.forEach { c ->
+            courseEndMillis(c, today).takeIf { e -> e > now }?.let(::add)
+            courseStartMillis(c, today).takeIf { s -> s > now }?.let { s ->
+                add(s - PRE_REMIND_MS)
+                add(s + POST_REMIND_MS)
+            }
+        }
+    }
+    val trigger = (candidates.minOrNull() ?: run {
         (Calendar.getInstance().clone() as Calendar).apply {
             add(Calendar.DAY_OF_YEAR, 1)
             set(Calendar.HOUR_OF_DAY, 0)

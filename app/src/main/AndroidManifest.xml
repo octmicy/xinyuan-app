@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -117,6 +120,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/credential_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".data.reminder.ClassReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".data.reminder.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
         </receiver>
     </application>
 

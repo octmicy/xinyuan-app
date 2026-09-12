@@ -244,6 +244,14 @@ internal fun AppWebViewDialog(
                     ) { v -> android.util.Log.d("XycApp", "body-collapse patch: $v") }
                 }, 1200)
             }
+            // 【调研桩】图书馆页面文本Dump（借阅数据结构分析用，发布版可移除）
+            if (host.endsWith("libsp.cn")) {
+                handler.postDelayed({
+                    view.evaluateJavascript(
+                        "(function(){try{return document.body.innerText.substring(0,4000)}catch(e){return 'ERR:'+e.message}})()",
+                    ) { v -> android.util.Log.d("XycApp", "libsp page text: $v") }
+                }, 8000)
+            }
         }
     }
 

@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Palette
@@ -90,6 +91,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var showFeedback by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
     var showThemeMode by rememberSaveable { mutableStateOf(false) }
+    var showReminder by rememberSaveable { mutableStateOf(false) }
     var avatarVersion by rememberSaveable { mutableStateOf(0) }
     val versionName = remember {
         runCatching {
@@ -225,6 +227,26 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         )
                         Spacer(Modifier.width(10.dp))
                         Text("主题外观", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    // ---- 课程提醒（上课前 X 分钟系统通知）----
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showReminder = true }
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Alarm,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("课程提醒", style = MaterialTheme.typography.bodyMedium)
                     }
 
                     // ---- 深色模式（跟随系统/浅色/深色，应用内选择优先于系统夜间模式）----
@@ -443,6 +465,10 @@ fun ProfileScreen(onLogout: () -> Unit) {
         }
     }
 
+    if (showReminder) {
+        ReminderDialog(onDismiss = { showReminder = false })
+    }
+
     if (showTheme) {
         ThemeScreenDialog(onDismiss = { showTheme = false })
     }
@@ -510,8 +536,8 @@ fun ProfileScreen(onLogout: () -> Unit) {
     }
 }
 
-/** 反馈模板：新手也能照着填，App 版本自动带上 */
-private fun feedbackTemplate(context: Context): String {
+/** 反馈模板：新手也能照着填，App 版本自动带上（AppRoot 的崩溃附带反馈也复用） */
+internal fun feedbackTemplate(context: Context): String {
     val version = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
     }.getOrNull() ?: "未知"

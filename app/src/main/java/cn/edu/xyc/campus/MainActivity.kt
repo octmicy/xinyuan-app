@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import cn.edu.xyc.campus.data.local.CredStore
+import cn.edu.xyc.campus.data.local.CrashLog
 import cn.edu.xyc.campus.data.local.CustomCourseStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.local.ThemeStore
@@ -26,9 +27,13 @@ class MainActivity : ComponentActivity() {
             android.webkit.WebView.setWebContentsDebuggingEnabled(true)
         }
         CredStore.init(this)
+        CrashLog.install(this) // 全局崩溃处理器：未捕获异常落盘本地（不上传），下次启动提示附带反馈
         CustomCourseStore.init(this)
         ThemeStore.init(this)
         ScheduleCache.init(this)
+        if (cn.edu.xyc.campus.data.reminder.ClassReminderManager.isEnabled(this)) {
+            cn.edu.xyc.campus.data.reminder.ClassReminderManager.plan(this)
+        }
         enableEdgeToEdge()
         // 打开 App 即重渲染小组件（读磁盘缓存，覆盖跨天/静默登录后的数据翻转）
         lifecycleScope.launch {
