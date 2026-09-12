@@ -50,6 +50,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cn.edu.xyc.campus.data.remote.CampusHttp
+import cn.edu.xyc.campus.data.local.BorrowStore
 
 /**
  * 应用内打开第三方系统：走门户跳转登录链（Cookie 由 CampusHttp 同步）。
@@ -69,7 +70,7 @@ internal fun AppWebViewDialog(
     var progress by remember { mutableIntStateOf(0) }
     var currentHost by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
-    var zoomPatched by remember { mutableStateOf(false) }
+    var zoomReloadedFor by remember { mutableStateOf<String?>(null) }
 
     val primary = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
@@ -119,6 +120,24 @@ internal fun AppWebViewDialog(
     fun injectPage(): String = finalHash?.removePrefix("#")?.trim('/')?.substringBefore('?') ?: ""
 
     // 兜底：stage 0 = 检查/恢复登录态；stage 2 = hash 导航目标路由并校验
+    /** 借阅同步：同源 fetch 借阅列表（jwtOpacAuth 会话）→ 落盘 → 临期通知 */
+    fun syncBorrows(view: WebView) {
+        view.evaluateJavascript(
+            "(function(){try{var h=sessionStorage.getItem('jwtHeader');var hd={};if(h&&sessionStorage.getItem('jwt')){hd[h]=sessionStorage.getItem('jwt')}" +
+                "return fetch('/find/loanInfo/loanList',{method:'POST',credentials:'include',headers:Object.assign({'Content-Type':'application/json'},hd),body:JSON.stringify({page:1,rows:50})})" +
+                ".then(function(r){return r.text()}).catch(function(e){return 'ERR:'+e.message})}catch(e){return 'CERR:'+e.message}})()",
+        ) { v ->
+            val text = v?.trim()?.removeSurrounding("\"") ?: return@evaluateJavascript
+            if (text.startsWith("ERR") || text.startsWith("CERR")) {
+                android.util.Log.d("XycApp", "borrows sync failed: $text")
+                return@evaluateJavascript
+            }
+            cn.edu.xyc.campus.data.local.BorrowStore.save(context, text)
+            cn.edu.xyc.campus.data.reminder.BorrowReminder.checkDue(context, text)
+        }
+    }
+
+
     fun injectStep(stage: Int) {
         if (injectedDone || injectOrigin.isEmpty()) return
         when (stage) {
@@ -172,7 +191,10 @@ internal fun AppWebViewDialog(
             webView.evaluateJavascript("window.location.hash") { h ->
                 android.util.Log.d("XycApp", "libsp current hash=$h")
                 when {
-                    h?.contains(injectPage()) == true -> injectedDone = true
+                    h?.contains(injectPage()) == true -> {
+                        injectedDone = true
+                        syncBorrows(webView)
+                    }
                     attempt < 2 -> verifyHash(attempt + 1, host)
                     else -> injectStep(0) // 官方链未达 → 轮询兜底
                 }
@@ -209,7 +231,7 @@ internal fun AppWebViewDialog(
     webView.webViewClient = object : WebViewClient() {
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             currentHost = runCatching { Uri.parse(url.orEmpty()).host }.getOrNull().orEmpty()
-            zoomPatched = false
+            // 注意：不重置 zoomReloadedFor——同一 URL 只允许一次缩放重载，否则与深链导航互相触发死循环
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
@@ -222,8 +244,8 @@ internal fun AppWebViewDialog(
                     "if(nc!==c){ms[i].setAttribute('content',nc);ch++}}return 'patched:'+ch}catch(e){return 'ERR'}})()",
             ) { v ->
                 android.util.Log.d("XycApp", "viewport patch: $v")
-                if (v?.contains("patched:0") == false && !zoomPatched) {
-                    zoomPatched = true
+                if (v?.contains("patched:0") == false && zoomReloadedFor != url) {
+                    zoomReloadedFor = url
                     view.post { view.reload() }
                 }
             }
@@ -233,6 +255,14 @@ internal fun AppWebViewDialog(
             android.util.Log.d("XycApp", "libsp page finished url=$url")
             if (finalHash != null && !injectStarted && host.endsWith("libsp.cn")) {
                 injectStarted = true
+                // 【调研桩】借阅列表接口探测（拿到真实返回结构后移除）
+                handler.postDelayed({
+                    view.evaluateJavascript(
+                        "(function(){try{var h=sessionStorage.getItem('jwtHeader');var hd={};if(h&&sessionStorage.getItem('jwt')){hd[h]=sessionStorage.getItem('jwt')}" +
+                            "return fetch('/find/loanInfo/loanList',{method:'POST',credentials:'include',headers:Object.assign({'Content-Type':'application/json'},hd),body:JSON.stringify({page:1,rows:50})})" +
+                            ".then(function(r){return r.text()}).then(function(t){return 'OK:'+t.substring(0,3500)}).catch(function(e){return 'ERR:'+e.message})}catch(e){return 'CERR:'+e.message}})()",
+                    ) { v -> android.util.Log.d("XycApp", "libsp loanList: $v") }
+                }, 12000)
                 // 【调研桩】Dump 页面链接（借阅列表路由发现用，发布版可移除）
                 handler.postDelayed({
                     view.evaluateJavascript(
