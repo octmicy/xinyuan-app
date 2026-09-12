@@ -69,6 +69,7 @@ internal fun AppWebViewDialog(
     var progress by remember { mutableIntStateOf(0) }
     var currentHost by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
+    var zoomPatched by remember { mutableStateOf(false) }
 
     val primary = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
@@ -208,16 +209,36 @@ internal fun AppWebViewDialog(
     webView.webViewClient = object : WebViewClient() {
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             currentHost = runCatching { Uri.parse(url.orEmpty()).host }.getOrNull().orEmpty()
+            zoomPatched = false
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
             url ?: return
+            // 强制可缩放：页面 viewport 带 user-scalable=no / maximum-scale 限制时改写并重载一次
+            view.evaluateJavascript(
+                "(function(){try{var ms=document.querySelectorAll('meta[name=viewport]');var ch=0;" +
+                    "for(var i=0;i<ms.length;i++){var c=ms[i].getAttribute('content')||'';" +
+                    "var nc=c.replace(/user-scalable\\s*=\\s*no/ig,'user-scalable=yes').replace(/maximum-scale\\s*=\\s*[\\\\d.]+/ig,'maximum-scale=10');" +
+                    "if(nc!==c){ms[i].setAttribute('content',nc);ch++}}return 'patched:'+ch}catch(e){return 'ERR'}})()",
+            ) { v ->
+                android.util.Log.d("XycApp", "viewport patch: $v")
+                if (v?.contains("patched:0") == false && !zoomPatched) {
+                    zoomPatched = true
+                    view.post { view.reload() }
+                }
+            }
             // 登录链落地图书馆域（任何 libsp 子域）后启动直达；只启动一次，
             // 避免 loadUrl 触发的 onPageFinished 重复排队
             val host = runCatching { Uri.parse(url).host.orEmpty() }.getOrNull().orEmpty()
             android.util.Log.d("XycApp", "libsp page finished url=$url")
             if (finalHash != null && !injectStarted && host.endsWith("libsp.cn")) {
                 injectStarted = true
+                // 【调研桩】Dump 页面链接（借阅列表路由发现用，发布版可移除）
+                handler.postDelayed({
+                    view.evaluateJavascript(
+                        "(function(){try{var out=[];document.querySelectorAll('a').forEach(function(a){var h=a.getAttribute('href');if(h&&h.length>1)out.push(h+' | '+(a.innerText||'').trim().substring(0,16))});return out.join('|§|').substring(0,3000)}catch(e){return 'ERR'}})()",
+                    ) { v -> android.util.Log.d("XycApp", "libsp links: $v") }
+                }, 6000)
                 // 已在目标路由（链路未来变化直达）就无需处理
                 if (url.contains("#/" + injectPage())) {
                     injectedDone = true
