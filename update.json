@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
-  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.3.1/xinyuan-v0.3.1.apk",
-  "notes": "修复教务网页成绩显示不全（页面高度塌陷导致无法滚动，自动注入修复）；内置浏览器返回键改为回退上一页；登录超时 60 秒自动取消并提示连接校园网；后台超 10 分钟回前台自动静默重登，不再掉登录；登录后课表小组件自动刷新；平均学分绩卡片支持右上角一键隐藏（持久化）"
+  "version": "0.3.2",
+  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.3.2/xinyuan-v0.3.2.apk",
+  "notes": "新增上课提醒（课前X分钟系统通知）、崩溃日志反馈、小组件课前提醒态、图书馆借阅同步与到期提醒；修复内置网页无法缩放"
 }
