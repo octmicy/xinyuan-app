@@ -1,5 +1,5 @@
 {
-  "version": "0.3.2",
-  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.3.2/xinyuan-v0.3.2.apk",
-  "notes": "新增上课提醒（课前X分钟系统通知）、崩溃日志反馈、小组件课前提醒态、图书馆借阅同步与到期提醒；修复内置网页无法缩放"
+  "version": "0.4.0",
+  "url": "https://github.com/octmicy/xinyuan-app/releases/download/v0.4.0/xinyuan-v0.4.0.apk",
+  "notes": "全新「首页」：时段问候与学期信息、今日课程速览、新余天气、每日摘录（一言 API）、今天吃什么随机推荐、图书馆借阅到期提醒、可配置快捷入口；底部导航调整为 5 格（首页居中），成绩查询移入「应用」宫格；首页图标焕新。性能优化：tab 切换动画流畅度大幅提升（掉帧率 18%→3%）、课表页缓存秒开不再闪加载、首页卡片异步加载；课程提醒支持自定义提前分钟数并加入精确闹钟权限"
 }

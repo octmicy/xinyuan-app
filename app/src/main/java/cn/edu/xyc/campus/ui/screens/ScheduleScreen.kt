@@ -135,7 +135,14 @@ fun ScheduleScreen() {
     val curTerm = remember { TermUtils.current() }
     var selXnm by rememberSaveable { mutableStateOf(curTerm.xnm) }
     var selTermNo by rememberSaveable { mutableStateOf(curTerm.termNo) }
-    var initialLoading by rememberSaveable { mutableStateOf(true) }
+    // 缓存命中时首帧就不显示全屏 loading（按当前学期周次缓存在否判断），彻底消除切回课表页的闪 loading
+    var initialLoading by rememberSaveable {
+        mutableStateOf(
+            !ScheduleCache.weeksList.containsKey(
+                ScheduleCache.weeksKey(curTerm.xnm, TermUtils.of(curTerm.xnm, curTerm.termNo).xqm),
+            ),
+        )
+    }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var weeks by remember { mutableStateOf<List<cn.edu.xyc.campus.data.model.WeekInfo>>(emptyList()) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
@@ -220,55 +227,77 @@ fun ScheduleScreen() {
 
     // 学期级初始化：周次列表 + 定位当前周 + 预加载相邻
     LaunchedEffect(selXnm, selTermNo, reloadKey) {
-        initialLoading = true
-        error = null
-        weeks = emptyList()
         val wkKey = ScheduleCache.weeksKey(selXnm, term.xqm)
         val force = reloadKey > 0 // 手动刷新：无视缓存强制拉取
-        val cachedList = ScheduleCache.weeksList[wkKey]
-        val list = (if (force) null else cachedList) ?: when (val w = JwxtApi.getWeeks(selXnm, term.xqm)) {
-            is JwxtResult.Ok -> {
-                ScheduleCache.putWeeks(wkKey, w.data)
-                w.data
-            }
-            is JwxtResult.SessionExpired -> {
-                error = w.message
-                null
-            }
-            is JwxtResult.Failed -> {
-                error = w.message
-                null
-            }
-        }
-        if (list != null) {
-            weeks = list
-            if (list.isEmpty()) {
-                // 未开课/不存在的学期（如第2、3学期）：不能进入翻页，否则 coerceIn(0,-1) 崩溃
-                error = "该学期暂无课表数据"
-                initialLoading = false
-                return@LaunchedEffect
-            }
+        val cachedList = if (force) null else ScheduleCache.weeksList[wkKey]
+
+        if (cachedList != null && cachedList.isNotEmpty()) {
+            // 缓存命中：直接渲染，不置 loading、不清空、不发阻塞请求，实现零 loading 秒开
+            weeks = cachedList
+            error = null
             val target = if (selXnm == curTerm.xnm && selTermNo == curTerm.termNo) {
-                guessCurrentWeekFromList(list) ?: 1
+                guessCurrentWeekFromList(cachedList) ?: 1
             } else 1
-            if (force || cachedList == null) {
+            val targetPage = (target - 1).coerceIn(0, cachedList.size - 1)
+            // 先解除 loading（让 Pager 组合）：scrollToPage 会挂起等待 Pager 布局，未组合时会永远挂起
+            initialLoading = false
+            // 仅当当前页不在目标周时才滚动，避免每次进入都强制跳回（保留用户翻周位置）
+            if (pagerState.currentPage != targetPage) {
+                pagerState.scrollToPage(targetPage)
+            }
+            // 确保当前周/相邻周课表就绪（缓存命中时 ensureWeek 内部 containsKey 会立即返回，零成本）
+            ensureWeek(target)
+            if (target + 1 <= cachedList.size) ensureWeek(target + 1)
+            if (target - 1 >= 1) ensureWeek(target - 1)
+            // 缓存秒开：后台与教务实际内容比对，有变化才更新
+            revalidate(selXnm, term, target)
+        } else {
+            // 无缓存/手动刷新：原逻辑（initialLoading=true → 网络 → weeks → scrollToPage → revalidate）
+            initialLoading = true
+            error = null
+            weeks = emptyList()
+            val list = (if (force) null else cachedList) ?: when (val w = JwxtApi.getWeeks(selXnm, term.xqm)) {
+                is JwxtResult.Ok -> {
+                    ScheduleCache.putWeeks(wkKey, w.data)
+                    w.data
+                }
+                is JwxtResult.SessionExpired -> {
+                    error = w.message
+                    null
+                }
+                is JwxtResult.Failed -> {
+                    error = w.message
+                    null
+                }
+            }
+            if (list != null) {
+                weeks = list
+                if (list.isEmpty()) {
+                    // 未开课/不存在的学期（如第2、3学期）：不能进入翻页，否则 coerceIn(0,-1) 崩溃
+                    error = "该学期暂无课表数据"
+                    initialLoading = false
+                    return@LaunchedEffect
+                }
+                val target = if (selXnm == curTerm.xnm && selTermNo == curTerm.termNo) {
+                    guessCurrentWeekFromList(list) ?: 1
+                } else 1
                 // 无缓存（或手动刷新）：阻塞拉取当前周
                 ensureWeek(target, force = force)
                 if (target + 1 <= list.size) ensureWeek(target + 1)
                 if (target - 1 >= 1) ensureWeek(target - 1)
+                // 先解除 loading（让 Pager 组合），再跳到当前周
+                // 注意：scrollToPage 会挂起等待 Pager 布局，若 Pager 未组合则永远挂起 → 必须先置 false
+                initialLoading = false
+                if (weeks.isNotEmpty()) {
+                    pagerState.scrollToPage((target - 1).coerceIn(0, weeks.size - 1))
+                }
+                // 缓存秒开：后台与教务实际内容比对，有变化才更新
+                if (!force && cachedList != null) {
+                    revalidate(selXnm, term, target)
+                }
             }
-            // 先解除 loading（让 Pager 组合），再跳到当前周
-            // 注意：scrollToPage 会挂起等待 Pager 布局，若 Pager 未组合则永远挂起 → 必须先置 false
             initialLoading = false
-            if (weeks.isNotEmpty()) {
-                pagerState.scrollToPage((target - 1).coerceIn(0, weeks.size - 1))
-            }
-            // 缓存秒开：后台与教务实际内容比对，有变化才更新
-            if (!force && cachedList != null) {
-                revalidate(selXnm, term, target)
-            }
         }
-        initialLoading = false
     }
 
     // 翻页稳定后：加载该周 + 预加载相邻周（拖动过程中相邻页大概率已就绪）

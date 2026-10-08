@@ -52,6 +52,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import cn.edu.xyc.campus.R
 import cn.edu.xyc.campus.data.local.AppGridPrefs
@@ -75,6 +77,7 @@ private data class AppEntry(
 )
 
 private val ALLOWED = listOf(
+    AppEntry("成绩查询", "成绩查询", R.drawable.nav_grades, native = true),
     AppEntry("综测计算", "综测计算", R.drawable.app_zongce, native = true),
     AppEntry("今天吃什么", "今天吃什么", R.drawable.app_food, comingSoon = true),
     AppEntry("教务系统", iconRes = R.drawable.app_jwxt),
@@ -97,6 +100,7 @@ fun AppsScreen() {
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var openTarget by remember { mutableStateOf<OpenTarget?>(null) }
     var showZongce by remember { mutableStateOf(false) }
+    var showGrades by remember { mutableStateOf(false) }
 
     // 宫格偏好：顺序 + 隐藏集合（SharedPreferences 持久化，杀后台后重建进程即恢复）
     var order by remember { mutableStateOf(AppGridPrefs.getOrder(context)) }
@@ -226,7 +230,10 @@ fun AppsScreen() {
                                                     Toast.LENGTH_SHORT,
                                                 ).show()
                                             }
-                                            entry.native -> showZongce = true
+                                            entry.native -> when (entry.portalName) {
+                                                "综测计算" -> showZongce = true
+                                                else -> showGrades = true
+                                            }
                                             else -> app?.let {
                                                 openTarget = OpenTarget(entry.label, it.ticketUrl(), entry.finalHash)
                                             }
@@ -265,6 +272,22 @@ fun AppsScreen() {
 
     if (showZongce) {
         ZongceScreen(onDismiss = { showZongce = false })
+    }
+
+    // 成绩查询（原底部 tab，现移入应用宫格全屏展示；返回按钮/系统返回键关闭）
+    if (showGrades) {
+        Dialog(
+            onDismissRequest = { showGrades = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                GradeScreen(onDismiss = { showGrades = false })
+            }
+        }
     }
 
     if (showVisibility) {
