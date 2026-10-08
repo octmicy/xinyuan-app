@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Card
@@ -66,7 +67,7 @@ private fun summarize(items: List<GradeItem>): GpaSummary {
 }
 
 @Composable
-fun GradeScreen() {
+fun GradeScreen(onDismiss: (() -> Unit)? = null) {
     val curTerm = remember { TermUtils.current() }
     val context = LocalContext.current
     var selXnm by rememberSaveable { mutableStateOf(curTerm.xnm) }
@@ -107,11 +108,23 @@ fun GradeScreen() {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "成绩查询",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-        )
+        // 标题行：嵌入应用宫格全屏展示时（onDismiss != null）显示返回按钮
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onDismiss != null) {
+                IconButton(onClick = onDismiss, modifier = Modifier.padding(start = 4.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "返回",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            Text(
+                "成绩查询",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+        }
 
         // 学年切换 + 右上角「平均学分绩」显隐开关（持久化；隐藏后卡片完全移除，不占位）
         Row(
@@ -319,13 +332,19 @@ private suspend fun loadTermGrades(term: TermUtils.Term): JwxtResult<List<GradeI
             ScheduleCache.unmark(key)
         }
     }
+    // 同 key 请求已在途：短轮询等待其写缓存。上限由 5000ms 降为 1500ms，
+    // 避免平均学分绩卡片因等待他方请求而长时间停留在 loading。
     var waited = 0
-    while (waited < 5000) {
+    while (waited < 1500) {
         delay(100)
         ScheduleCache.gradeData[key]?.let { return JwxtResult.Ok(it) }
         waited += 100
     }
-    return JwxtApi.getGrades(term)
+    // 超时降级：不再阻塞等待，也不调用 tryMark（避免与他方在途请求争用 inFlight 造成死锁），
+    // 直接发起真实请求兜底（服务端幂等，重复请求无副作用），并回写缓存。
+    val r = JwxtApi.getGrades(term)
+    if (r is JwxtResult.Ok) ScheduleCache.gradeData[key] = r.data
+    return r
 }
 
 /**

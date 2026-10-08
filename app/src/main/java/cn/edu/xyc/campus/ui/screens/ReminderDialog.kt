@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +45,8 @@ internal fun ReminderDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ClassReminderManager.isEnabled(context)) }
     var advance by remember { mutableIntStateOf(ClassReminderManager.advanceMinutes(context)) }
+    // 自定义输入框文本：跟随当前提前量，用户可直接改数字（数字键盘）
+    var input by rememberSaveable { mutableStateOf(ClassReminderManager.advanceMinutes(context).toString()) }
 
     val notifPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -94,18 +97,45 @@ internal fun ReminderDialog(onDismiss: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // FlowRow 自动换行：5 个档位在小屏对话框里不再溢出截断
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         listOf(5, 10, 15, 20, 30).forEach { m ->
                             FilterChip(
                                 selected = advance == m,
                                 onClick = {
                                     advance = m
                                     ClassReminderManager.setAdvanceMinutes(context, m)
+                                    input = m.toString()
                                 },
                                 label = { Text("${m}分钟") },
                             )
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    // 自定义分钟数：数字键盘直接输入，实时生效（范围 1-180）
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { v ->
+                            input = v.filter { it.isDigit() }.take(3)
+                            val n = input.toIntOrNull()
+                            if (n != null && n in 1..180) {
+                                advance = n
+                                ClassReminderManager.setAdvanceMinutes(context, n)
+                            }
+                        },
+                        label = { Text("自定义提醒分钟数") },
+                        suffix = { Text("分钟") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Spacer(Modifier.height(10.dp))
                     val am = context.getSystemService(AlarmManager::class.java)
                     val exactOk = Build.VERSION.SDK_INT < 31 || am?.canScheduleExactAlarms() == true
