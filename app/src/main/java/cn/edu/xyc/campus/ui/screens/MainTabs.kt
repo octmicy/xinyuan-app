@@ -76,9 +76,9 @@ fun MainTabs(onLogout: () -> Unit) {
         // 2) 学籍卡（优先复用课表预载的 xsxx）
         if (!ScheduleCache.profileData.containsKey("PROFILE")) {
             val xsxx = ScheduleCache.weekData.values.firstOrNull()?.second
-            val college = ScheduleCache.gradeData[gKey]?.firstOrNull()?.school.orEmpty()
             if (xsxx != null) {
-                ScheduleCache.profileData["PROFILE"] = ProfileCard(xsxx, college)
+                // 学院取自学籍 xsxx（真实院系，为空则 UI 隐藏该行），不用成绩开课院系冒充
+                ScheduleCache.profileData["PROFILE"] = ProfileCard(xsxx, xsxx.college)
             } else if (ScheduleCache.tryMark("PROFILE")) {
                 try {
                     when (val r = JwxtApi.getProfile()) {

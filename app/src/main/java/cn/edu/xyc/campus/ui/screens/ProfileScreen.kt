@@ -66,11 +66,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.edu.xyc.campus.R
 import cn.edu.xyc.campus.data.local.AvatarStore
+import cn.edu.xyc.campus.data.local.CollegeStore
 import cn.edu.xyc.campus.data.local.ScheduleCache
 import cn.edu.xyc.campus.data.model.ProfileCard
 import cn.edu.xyc.campus.data.remote.JwxtApi
 import cn.edu.xyc.campus.data.remote.JwxtResult
 import cn.edu.xyc.campus.data.remote.PortalApi
+import cn.edu.xyc.campus.data.remote.XgApi
 import cn.edu.xyc.campus.ui.theme.ThemeModeStore
 import cn.edu.xyc.campus.widget.TodayWidget
 import androidx.glance.appwidget.updateAll
@@ -88,6 +90,8 @@ fun ProfileScreen(onLogout: () -> Unit) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var profile by remember { mutableStateOf<ProfileCard?>(null) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    // 学院名称：优先本机缓存（学工同步结果），为空时由下方 LaunchedEffect 后台拉取
+    var college by remember { mutableStateOf(CollegeStore.get(context)) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
     var showThemeMode by rememberSaveable { mutableStateOf(false) }
@@ -155,6 +159,18 @@ fun ProfileScreen(onLogout: () -> Unit) {
         loading = false
     }
 
+    // 学院名称后台同步：本机未缓存时从学工系统拉取，成功后落盘并刷新 UI；失败静默不阻塞渲染
+    LaunchedEffect(Unit) {
+        if (college.isEmpty()) {
+            val fetched = XgApi.fetchCollege()
+            android.util.Log.d("XycApp", "XgApi college: $fetched")
+            if (!fetched.isNullOrEmpty()) {
+                CollegeStore.set(context, fetched)
+                college = fetched
+            }
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -202,10 +218,12 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Column(Modifier.padding(16.dp)) {
+                            // 学院优先用学工同步结果（college），为空时回退学籍 xsxx（card.college，通常为空）
+                            val collegeText = college.ifEmpty { card.college }
                             InfoRow("班级", info.className)
                             InfoRow("专业", info.major)
                             InfoRow("年级", info.gradeYear)
-                            if (card.college.isNotEmpty()) InfoRow("学院", card.college)
+                            if (collegeText.isNotEmpty()) InfoRow("学院", collegeText)
                         }
                     }
 
@@ -216,7 +234,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             .fillMaxSize()
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { showTheme = true }
-                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                            .padding(horizontal = 4.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
@@ -236,7 +254,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             .fillMaxSize()
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { showReminder = true }
-                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                            .padding(horizontal = 4.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
@@ -256,7 +274,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             .fillMaxSize()
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { showThemeMode = true }
-                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                            .padding(horizontal = 4.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
@@ -308,7 +326,7 @@ fun ProfileScreen(onLogout: () -> Unit) {
                                             )
                                         }
                                     }
-                                    .padding(horizontal = 4.dp, vertical = 10.dp),
+                                    .padding(horizontal = 4.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
@@ -433,7 +451,10 @@ fun ProfileScreen(onLogout: () -> Unit) {
                             ),
                         ) { Text("退出登录") }
                         Spacer(Modifier.width(12.dp))
-                        OutlinedButton(onClick = checkUpdate, enabled = !checkingUpdate) {
+                        OutlinedButton(
+                            onClick = checkUpdate,
+                            enabled = !checkingUpdate,
+                        ) {
                             if (checkingUpdate) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),

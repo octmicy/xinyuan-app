@@ -246,12 +246,18 @@ object JwxtApi {
                 "${it.dayOfWeek}-${it.startSection}-${it.endSection}-${it.name}-${it.room}"
             }
             val xs = obj.optJSONObject("xsxx") ?: JSONObject()
+            // 诊断：确认正方 xsxx 是否下发院系字段（实测后决定是否需要接学籍接口）
+            android.util.Log.d("XycApp", "xsxx keys: ${xs.keys().asSequence().joinToString()}")
             val info = StudentInfo(
                 name = xs.optString("XM", ""),
                 studentId = xs.optString("XH", ""),
                 className = xs.optString("BJMC", ""),
                 major = xs.optString("ZYMC", ""),
                 gradeYear = xs.optString("NJDM_ID", ""),
+                // 院系名称：正方各版本字段名不一，按常见候选依次取，均无则为空（UI 不展示学院行）
+                college = listOf("YXMC", "JGMC", "YXDM_MC", "SZYXMC", "YXM")
+                    .firstNotNullOfOrNull { k -> xs.optString(k, "").takeIf { it.isNotBlank() } }
+                    .orEmpty(),
             )
             JwxtResult.Ok(courses to info)
         } catch (t: Throwable) {
@@ -322,13 +328,14 @@ object JwxtApi {
     }
 
     // ---------------- 学籍卡 ----------------
+
     suspend fun getProfile(): JwxtResult<ProfileCard> {
         val term = TermUtils.current()
         return when (val r = getScheduleByWeek(term, 1)) {
             is JwxtResult.Ok -> {
-                val grades = getGrades(term)
-                val college = (grades as? JwxtResult.Ok)?.data?.firstOrNull()?.school.orEmpty()
-                JwxtResult.Ok(ProfileCard(r.data.second, college))
+                // 学院一律取自学籍 xsxx（真实院系）；接口未下发时留空，由 UI 隐藏该行——
+                // 不再用成绩的 kkbmmc（开课院系）冒充，那会导致显示错误（如显示任课学院而非本人学院）
+                JwxtResult.Ok(ProfileCard(r.data.second, r.data.second.college))
             }
             is JwxtResult.SessionExpired -> JwxtResult.SessionExpired(r.message)
             is JwxtResult.Failed -> JwxtResult.Failed(r.message)
