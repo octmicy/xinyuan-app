@@ -61,7 +61,7 @@ fun UpdateDialog(
             TextButton(onClick = {
                 // 复用检测更新时验证可用的镜像前缀，保证下载链路与检测一致
                 val finalUrl = (proxyPrefix ?: "") + downloadUrl
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(finalUrl))) }
+                openInBrowser(context, finalUrl)
                 onDismiss()
             }) { Text("更新") }
         },
@@ -76,4 +76,25 @@ fun UpdateDialog(
             }
         },
     )
+}
+
+/**
+ * 用浏览器打开下载链接。
+ *
+ * 关键在 `CATEGORY_BROWSABLE`：它把候选限定为「浏览器类应用」，
+ * 避免链接被系统自带下载器 / 网盘 / 应用商店等非浏览器组件接管（MIUI 上尤其明显）；
+ * 系统若已设置默认浏览器则直接用它打开，未设置时由系统弹出选择器（用户可勾选"始终"）。
+ * 极端情况（无任何浏览器可处理）回退普通 ACTION_VIEW，保证不会因 Intent 无法解析而静默失败。
+ */
+private fun openInBrowser(context: android.content.Context, url: String) {
+    val uri = Uri.parse(url)
+    val browserIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val fallback = Intent(Intent.ACTION_VIEW, uri).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(browserIntent) }
+        .onFailure { runCatching { context.startActivity(fallback) } }
 }
