@@ -92,12 +92,13 @@ data class StudentInfo(
     val className: String,   // BJMC
     val major: String,       // ZYMC
     val gradeYear: String,   // NJDM_ID
+    val college: String = "", // 院系名称（YXMC/JGMC 等，接口未下发时为空）
 )
 
-/** 学籍卡（我的页展示，数据综合自课表 xsxx + 成绩首条） */
+/** 学籍卡（我的页展示，数据来自课表 xsxx 学籍信息） */
 data class ProfileCard(
     val info: StudentInfo,
-    val college: String,     // 开课学院（成绩 kkbmmc，仅参考）
+    val college: String,     // 学生所在学院（学籍 YXMC）；为空时 UI 不展示该行
 )
 
 /** 第三方应用（门户 /app/getApplication） */

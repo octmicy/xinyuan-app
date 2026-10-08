@@ -133,7 +133,8 @@ object ScheduleCache {
                             .put("i", student.studentId)
                             .put("c", student.className)
                             .put("m", student.major)
-                            .put("g", student.gradeYear))
+                            .put("g", student.gradeYear)
+                            .put("yx", student.college))
                         .put("courses", courses),
                 )
             }
@@ -191,6 +192,7 @@ object ScheduleCache {
                         className = st.optString("c"),
                         major = st.optString("m"),
                         gradeYear = st.optString("g"),
+                        college = st.optString("yx"),
                     )
                     val courses = mutableListOf<Course>()
                     for (j in 0 until coursesArr.length()) {
