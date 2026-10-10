@@ -91,9 +91,9 @@ fun AppRoot() {
                             val cred = CredStore.load() ?: return@launch
                             when (val r = PortalApi.login(cred.account, cred.password)) {
                                 is LoginResult.Success -> {
+                                    // 只换会话，不清 ScheduleCache：缓存与会话无关，清了会让课表页冷启动闪 loading
                                     SessionStore.token = r.token
                                     SessionStore.account = cred.account
-                                    ScheduleCache.clear() // 会话已换新，各页重新拉取
                                 }
                                 else -> Unit // 静默失败：等接口报会话过期时由页面级重试兜底
                             }

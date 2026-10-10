@@ -5,7 +5,7 @@ import android.content.Context
 /**
  * 首页快捷入口显隐（启用集合）持久化。
  *
- * 首页提供 6 个快捷入口（图书馆电子证、请假申请、教务系统、学工系统、学生缴费、网络教学），
+ * 首页提供 5 个快捷入口（图书馆电子证、请假申请、教务系统、学工系统、网络教学），
  * 用户可自定义显示哪些；启用集合以 SharedPreferences StringSet 存储。
  *
  * 语义：无记录（getEnabled 返回 null）= 用户从未自定义，调用方使用默认前 3 个
@@ -24,9 +24,6 @@ object HomePrefs {
 
     /** 学工系统 */
     const val ENTRY_XG = "xg"
-
-    /** 学生缴费 */
-    const val ENTRY_PAY = "pay"
 
     /** 网络教学 */
     const val ENTRY_ONLINE = "online"

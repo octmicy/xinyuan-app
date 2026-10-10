@@ -33,6 +33,7 @@ object CustomCourseStore {
         val endTime: String = "",
         val fracStart: Float = 0f,  // 起始节次格内纵向起点比例
         val fracEnd: Float = 1f,    // 结束节次格内纵向终点比例
+        val onlyWeek: Int = 0,      // 0=按 parity 重复；>0=仅该教学周 zs 生效（补课）
     ) {
         val isTimeMode: Boolean get() = startTime.isNotEmpty() && endTime.isNotEmpty()
         val timeText: String get() = if (isTimeMode) "$startTime-$endTime" else ""
@@ -67,6 +68,7 @@ object CustomCourseStore {
                             endTime = o.optString("etime"),
                             fracStart = o.optDouble("fs", 0.0).toFloat(),
                             fracEnd = o.optDouble("fe", 1.0).toFloat(),
+                            onlyWeek = o.optInt("wk", 0),
                         )
                     }
                     nextId = (courses.maxOfOrNull { it.id } ?: 0L) + 1
@@ -100,6 +102,30 @@ object CustomCourseStore {
         )
         synchronized(courses) { courses += def }
         persist(context)
+    }
+
+    /** 补课：把某周某源星期的正课批量复制为「仅本周生效」的自定义课到目标星期。返回复制条数。 */
+    fun addMakeup(context: Context, zs: Int, targetDay: Int, courses: List<Course>): Int {
+        val defs = courses.map { course ->
+            Def(
+                id = nextId++,
+                name = course.name,
+                teacher = course.teacher,
+                room = course.room,
+                dayOfWeek = targetDay,
+                startSection = course.startSection,
+                endSection = course.endSection,
+                parity = 0, // 被 onlyWeek 覆盖，无意义但保持默认
+                startTime = "", // 补课课一律按节次模式
+                endTime = "",
+                fracStart = 0f,
+                fracEnd = 1f,
+                onlyWeek = zs,
+            )
+        }
+        synchronized(this.courses) { this.courses.addAll(defs) }
+        persist(context)
+        return courses.size
     }
 
     fun remove(context: Context, id: Long) {
@@ -171,7 +197,8 @@ object CustomCourseStore {
                             .put("stime", c.startTime)
                             .put("etime", c.endTime)
                             .put("fs", c.fracStart.toDouble())
-                            .put("fe", c.fracEnd.toDouble()),
+                            .put("fe", c.fracEnd.toDouble())
+                            .put("wk", c.onlyWeek),
                     )
                 }
             }
@@ -194,13 +221,16 @@ object CustomCourseStore {
     /** 学期总表用：全部自定义课（不分周次过滤，重复规则标注在 weekText） */
     fun allAsCourses(): List<Course> = courses.map { it.toCourse() }
 
-    /** 课表网格用：某教学周的自定义课（按单双周过滤），转成 Course 直接复用网格渲染 */
+    /** 课表网格用：某教学周的自定义课（按单双周/补课周过滤），转成 Course 直接复用网格渲染 */
     fun forWeek(zs: Int): List<Course> = courses
-        .filter { matchParity(it.parity, zs) }
+        .filter { visibleInWeek(it, zs) }
         .map { it.toCourse() }
 
     private fun matchParity(parity: Int, zs: Int): Boolean =
         parity == 0 || (parity == 1 && zs % 2 == 1) || (parity == 2 && zs % 2 == 0)
+
+    private fun visibleInWeek(def: Def, zs: Int): Boolean =
+        def.onlyWeek > 0 && def.onlyWeek == zs || def.onlyWeek == 0 && matchParity(def.parity, zs)
 
     private fun Def.toCourse() = Course(
         name = name,
@@ -210,9 +240,9 @@ object CustomCourseStore {
         dayOfWeek = dayOfWeek,
         startSection = startSection,
         endSection = endSection,
-        weekText = parityLabel(parity),
+        weekText = if (onlyWeek > 0) "第${onlyWeek}周·补课" else parityLabel(parity),
         credit = "",
-        nature = "自定义",
+        nature = if (onlyWeek > 0) "补课" else "自定义",
         classGroup = "",
         isCustom = true,
         customId = id,
@@ -229,7 +259,9 @@ object CustomCourseStore {
         (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val parity = o.optInt("parity", 0)
-            if (!matchParity(parity, zs)) return@mapNotNull null
+            val onlyWeek = o.optInt("wk", 0)
+            val visible = onlyWeek > 0 && onlyWeek == zs || onlyWeek == 0 && matchParity(parity, zs)
+            if (!visible) return@mapNotNull null
             val stime = o.optString("stime")
             val etime = o.optString("etime")
             Course(
@@ -240,9 +272,9 @@ object CustomCourseStore {
                 dayOfWeek = o.optInt("day", 1),
                 startSection = o.optInt("start", 1),
                 endSection = o.optInt("end", 1),
-                weekText = parityLabel(parity),
+                weekText = if (onlyWeek > 0) "第${onlyWeek}周·补课" else parityLabel(parity),
                 credit = "",
-                nature = "自定义",
+                nature = if (onlyWeek > 0) "补课" else "自定义",
                 classGroup = "",
                 isCustom = true,
                 customId = o.optLong("id"),

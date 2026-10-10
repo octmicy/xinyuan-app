@@ -3,6 +3,8 @@ package cn.edu.xyc.campus.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,7 +65,7 @@ private fun minutesText(minutes: Int): String =
  * 按节次（起止节次，作息表推算时间）或按具体时间（如 18:30-20:00，网格按重叠节次折算）。
  * 可选单双周。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun CustomCourseDialog(
     onDismiss: () -> Unit,
@@ -73,6 +75,8 @@ internal fun CustomCourseDialog(
         startSec: Int, endSec: Int,
         startTime: String, endTime: String,
     ) -> Unit,
+    weekCourses: List<cn.edu.xyc.campus.data.model.Course>, // 当前查看周的全部课程（正课+自定义）
+    onMakeup: (sourceDay: Int, targetDay: Int) -> Unit,
 ) {
     // 拆帧：先弹对话框窗口，表单下一帧再填充，避免打开瞬间一大帧卡顿
     var formReady by remember { mutableStateOf(false) }
@@ -94,6 +98,15 @@ internal fun CustomCourseDialog(
     var endExpanded by remember { mutableStateOf(false) }
     var invalid by remember { mutableStateOf(false) }
 
+    // 补课模式与普通表单共用一个对话框；状态都在本 composable 作用域，if 分支切换不会丢输入
+    var makeupMode by rememberSaveable { mutableStateOf(false) }
+    var srcDay by rememberSaveable { mutableIntStateOf(0) } // 源星期：0=未选，1-7
+    var dstDay by rememberSaveable { mutableIntStateOf(0) } // 目标星期：0=未选，1-7
+    // 源星期当天的正课（按开始节次排序），用于补课预览
+    val srcCourses = weekCourses
+        .filter { it.dayOfWeek == srcDay && !it.isCustom }
+        .sortedBy { it.startSection }
+
     fun submit() {
         val sm = timeMinutes(startTime)
         val em = timeMinutes(endTime)
@@ -112,7 +125,7 @@ internal fun CustomCourseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加自定义课程") },
+        title = { Text(if (makeupMode) "补课" else "添加自定义课程") },
         text = {
             if (!formReady) {
                 Box(
@@ -122,6 +135,79 @@ internal fun CustomCourseDialog(
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(Modifier.size(26.dp))
+                }
+            } else if (makeupMode) {
+                Column(
+                    Modifier
+                        .verticalScroll(rememberScrollState())
+                        .fillMaxWidth(),
+                ) {
+                    Text("把星期", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        DAY_LABELS.forEachIndexed { i, label ->
+                            FilterChip(
+                                selected = srcDay == i + 1,
+                                onClick = { srcDay = i + 1 },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("的课补到", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        DAY_LABELS.forEachIndexed { i, label ->
+                            FilterChip(
+                                selected = dstDay == i + 1,
+                                onClick = { dstDay = i + 1 },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    when {
+                        // 选了源星期但当天没有正课
+                        srcDay != 0 && srcCourses.isEmpty() -> Text(
+                            "该天本周无正课",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        srcCourses.isNotEmpty() -> srcCourses.forEach { c ->
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                            ) {
+                                Text(
+                                    "第${c.startSection}-${c.endSection}节  ${c.name}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                // 教师/地点为空时省略对应片段与中间分隔符
+                                val sub = listOf(c.teacher, c.room)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · ")
+                                if (sub.isNotEmpty()) {
+                                    Text(
+                                        sub,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (srcDay != 0 && dstDay != 0 && srcDay == dstDay) {
+                        Text(
+                            "不能选择同一天",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             } else {
             Column(
@@ -318,7 +404,27 @@ internal fun CustomCourseDialog(
             }
             }
         },
-        confirmButton = { TextButton(onClick = ::submit) { Text("添加") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = {
+            if (makeupMode) {
+                TextButton(
+                    enabled = srcDay in 1..7 && dstDay in 1..7 &&
+                        srcDay != dstDay && srcCourses.isNotEmpty(),
+                    onClick = { onMakeup(srcDay, dstDay) },
+                ) { Text("确认补课") }
+            } else {
+                TextButton(onClick = ::submit) { Text("添加") }
+            }
+        },
+        dismissButton = {
+            if (makeupMode) {
+                TextButton(onClick = { makeupMode = false }) { Text("返回") }
+            } else {
+                // 补课入口与取消同居左侧：补课（最左）、取消；添加在右侧
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { makeupMode = true }) { Text("补课") }
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                }
+            }
+        },
     )
 }

@@ -56,7 +56,6 @@ import cn.edu.xyc.campus.data.remote.CredentialLauncher
 import cn.edu.xyc.campus.data.remote.FoodRecommender
 import cn.edu.xyc.campus.data.remote.HitokotoApi
 import cn.edu.xyc.campus.data.remote.PortalApi
-import cn.edu.xyc.campus.data.remote.SessionStore
 import cn.edu.xyc.campus.data.remote.TermUtils
 import cn.edu.xyc.campus.data.remote.WeatherApi
 import cn.edu.xyc.campus.data.remote.ticketUrl
@@ -73,12 +72,6 @@ import java.util.Locale
 /** 头部渐变：浅色 / 深色两套（isAppDarkTheme() 选择） */
 private val HEADER_GRADIENT_LIGHT = listOf(Color(0xFF3D6FD6), Color(0xFF6F9BE8))
 private val HEADER_GRADIENT_DARK = listOf(Color(0xFF24418C), Color(0xFF3D63B8))
-
-/** 学工登录链前缀（与 LeaveScreen.kt 保持一致）：wiseduIndex.jsp?ticket= → casLogin 种会话 → 落地学工 SPA */
-private const val XG_LOGIN_PREFIX = "http://ssxt.xyc.edu.cn/wiseduIndex.jsp?ticket="
-
-/** 请假申请表单的 SPA 路由（与 LeaveScreen.ROUTE_APPLY 一致） */
-private const val LEAVE_ROUTE = "#/qingjia/qj_s_add"
 
 /** 一天的毫秒数（周次/倒计时推算用） */
 private const val DAY_MS = 24L * 3600 * 1000
@@ -103,11 +96,10 @@ private data class HomeEntry(
 )
 
 private val HOME_ENTRIES = listOf(
-    HomeEntry(HomePrefs.ENTRY_LIBRARY, "电子证", "🎫", CredentialLauncher.LIBRARY_PORTAL_NAME),
-    HomeEntry(HomePrefs.ENTRY_LEAVE, "请假申请", "📝", portalName = "", finalHash = LEAVE_ROUTE),
+    HomeEntry(HomePrefs.ENTRY_LIBRARY, "电子证", "🎫", CredentialLauncher.LIBRARY_PORTAL_NAME, finalHash = CredentialLauncher.LIBRARY_ROUTE),
+    HomeEntry(HomePrefs.ENTRY_LEAVE, "请假申请", "📝", portalName = ""),
     HomeEntry(HomePrefs.ENTRY_JWXT, "教务系统", "🎓", "教务系统"),
     HomeEntry(HomePrefs.ENTRY_XG, "学工系统", "🏫", "学工系统"),
-    HomeEntry(HomePrefs.ENTRY_PAY, "学生缴费", "💰", "学生缴费"),
     HomeEntry(HomePrefs.ENTRY_ONLINE, "网络教学", "💻", "网络教学系统"),
 )
 
@@ -214,7 +206,7 @@ private fun matchPortalApp(apps: List<ThirdApp>, entry: HomeEntry): ThirdApp? {
  * 所有卡片随数据缺失自动隐藏；天气/摘录异步加载失败静默降级。
  */
 @Composable
-fun HomeScreen(onOpenSchedule: () -> Unit) {
+fun HomeScreen(onOpenSchedule: () -> Unit, onOpenLeave: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val dark = isAppDarkTheme()
@@ -235,17 +227,24 @@ fun HomeScreen(onOpenSchedule: () -> Unit) {
     // ---- 应用内 WebView 打开目标 ----
     var openTarget by remember { mutableStateOf<HomeOpenTarget?>(null) }
 
-    /** 点击快捷入口：请假直走学工登录链；其余门户匹配 → ticket URL → WebView（缓存未命中拉一次重试） */
+    /** 点击快捷入口：电子证走专用解析（等 token+免密链接，同应用宫格/小组件）；请假切 tab；其余门户匹配 → WebView */
     fun openEntry(entry: HomeEntry) {
+        // 请假直达底部「请假」tab：LeaveScreen 自带完整学工登录链与表单路由
         if (entry.key == HomePrefs.ENTRY_LEAVE) {
-            val token = SessionStore.token
-            if (token.isNullOrEmpty()) {
-                Toast.makeText(context, "暂无法打开，请稍后再试", Toast.LENGTH_SHORT).show()
-                return
+            onOpenLeave()
+            return
+        }
+        // 电子证复用 CredentialLauncher 专用解析（resolveTarget 内部等待会话就绪并优先 xyoauthlogin），
+        // 与应用宫格「图书馆电子证」、桌面小组件点击完全同源，避免通用匹配在会话未就绪时打不开
+        if (entry.key == HomePrefs.ENTRY_LIBRARY) {
+            scope.launch {
+                val target = CredentialLauncher.resolveTarget(context)
+                if (target != null) {
+                    openTarget = HomeOpenTarget(target.name, target.url, target.finalHash)
+                } else {
+                    Toast.makeText(context, "暂无法打开，请稍后再试", Toast.LENGTH_SHORT).show()
+                }
             }
-            // hash 挂在初始 URL 上（重定向不带 fragment 时保留原 fragment），
-            // 登录链落地学工 SPA 后直达请假表单；AppWebViewDialog 的 finalHash 自动导航仅适配 libsp 域
-            openTarget = HomeOpenTarget(entry.label, XG_LOGIN_PREFIX + token + LEAVE_ROUTE, LEAVE_ROUTE)
             return
         }
         val matched = ScheduleCache.applications["APPS"]?.let { matchPortalApp(it, entry) }
