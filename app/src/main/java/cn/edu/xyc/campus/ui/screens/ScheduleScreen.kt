@@ -133,18 +133,17 @@ internal fun customCourseColor(): Pair<Color, Color> =
 @Composable
 fun ScheduleScreen() {
     val curTerm = remember { TermUtils.current() }
+    // 首帧直接用磁盘缓存初始化（ScheduleCache.init 已在 setContent 前同步读盘），实现冷启动零闪烁秒开
+    val initialTerm = TermUtils.of(curTerm.xnm, curTerm.termNo)
+    val initialWkKey = ScheduleCache.weeksKey(curTerm.xnm, initialTerm.xqm)
+    val cachedInitialWeeks = ScheduleCache.weeksList[initialWkKey] ?: emptyList()
+    val cachedInitialWeek = guessCurrentWeekFromList(cachedInitialWeeks) ?: 1
     var selXnm by rememberSaveable { mutableStateOf(curTerm.xnm) }
     var selTermNo by rememberSaveable { mutableStateOf(curTerm.termNo) }
-    // 缓存命中时首帧就不显示全屏 loading（按当前学期周次缓存在否判断），彻底消除切回课表页的闪 loading
-    var initialLoading by rememberSaveable {
-        mutableStateOf(
-            !ScheduleCache.weeksList.containsKey(
-                ScheduleCache.weeksKey(curTerm.xnm, TermUtils.of(curTerm.xnm, curTerm.termNo).xqm),
-            ),
-        )
-    }
+    // 缓存命中时首帧就不显示全屏 loading；初值只取一次（不用 rememberSaveable，恢复时以内存缓存为准）
+    var initialLoading by remember { mutableStateOf(cachedInitialWeeks.isEmpty()) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
-    var weeks by remember { mutableStateOf<List<cn.edu.xyc.campus.data.model.WeekInfo>>(emptyList()) }
+    var weeks by remember { mutableStateOf(cachedInitialWeeks) }
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var showTermPicker by rememberSaveable { mutableStateOf(false) }
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
@@ -156,8 +155,10 @@ fun ScheduleScreen() {
     val scope = rememberCoroutineScope()
     val term = TermUtils.of(selXnm, selTermNo)
 
-    // Pager：一周一页，跟手拖拽 + 自动吸附
-    val pagerState = rememberPagerState(initialPage = 0) { weeks.size.coerceAtLeast(1) }
+    // Pager：一周一页，跟手拖拽 + 自动吸附；初始页直接定位缓存当前周，避免首帧先闪第 1 周
+    val pagerState = rememberPagerState(
+        initialPage = (cachedInitialWeek - 1).coerceIn(0, (cachedInitialWeeks.size - 1).coerceAtLeast(0)),
+    ) { weeks.size.coerceAtLeast(1) }
     val displayWeek = pagerState.currentPage + 1
     val curWeek = remember(weeks) { guessCurrentWeekFromList(weeks) }
     val context = LocalContext.current
@@ -513,6 +514,14 @@ fun ScheduleScreen() {
         )
     }
 
+    // 添加课程对话框：当前查看周的正课 + 自定义课（补课模式预览源天正课用）
+    val addDialogWeek = displayWeek
+    val addDialogKey = ScheduleCache.weekKey(selXnm, term.xqm, addDialogWeek)
+    val addDialogWeekCourses = remember(addDialogKey, CustomCourseStore.courses.size) {
+        ScheduleCache.weekData[addDialogKey]?.first.orEmpty() +
+            CustomCourseStore.forWeek(addDialogWeek)
+    }
+
     if (showAddCourse) {
         CustomCourseDialog(
             onDismiss = { showAddCourse = false },
@@ -523,6 +532,25 @@ fun ScheduleScreen() {
                 )
                 showAddCourse = false
                 Toast.makeText(context, "已添加自定义课程", Toast.LENGTH_SHORT).show()
+            },
+            weekCourses = addDialogWeekCourses,
+            onMakeup = { src, dst ->
+                // 源天正课（对话框已过滤一次，这里防御性重算）
+                val srcCourses = addDialogWeekCourses
+                    .filter { it.dayOfWeek == src && !it.isCustom }
+                    .sortedBy { it.startSection }
+                if (srcCourses.isEmpty()) {
+                    Toast.makeText(context, "该天本周无正课", Toast.LENGTH_SHORT).show()
+                } else {
+                    val n = CustomCourseStore.addMakeup(context, addDialogWeek, dst, srcCourses)
+                    showAddCourse = false
+                    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
+                    Toast.makeText(
+                        context,
+                        "已将周${labels[src - 1]} $n 门课补到周${labels[dst - 1]}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
             },
         )
     }
@@ -636,7 +664,11 @@ internal fun CourseDetailDialog(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (course.isCustom) "[自定义] ${course.name}" else course.name,
+                    when {
+                        !course.isCustom -> course.name
+                        course.nature == "补课" -> "[补课] ${course.name}"
+                        else -> "[自定义] ${course.name}"
+                    },
                     style = MaterialTheme.typography.titleMedium,
                 )
             }

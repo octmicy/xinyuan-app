@@ -85,7 +85,6 @@ private val ALLOWED = listOf(
     AppEntry("就业系统", iconRes = R.drawable.app_career),
     AppEntry("毕业生离校系统", iconRes = R.drawable.app_graduate),
     AppEntry("学工系统", iconRes = R.drawable.app_xg),
-    AppEntry("学生缴费", iconRes = R.drawable.app_pay),
     AppEntry("网络教学系统", iconRes = R.drawable.app_online),
 )
 
